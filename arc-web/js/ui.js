@@ -16,6 +16,7 @@ class UIStore {
         // HA integration settings
         this.HA_URL = 'http://homeassistant.local:8123';
         this.HA_TOKEN = 'REDACTED-HA_TOKEN';
+     
         this.ENTITY = 'media_player.medierum';
         
         // Media info
@@ -664,7 +665,7 @@ class UIStore {
             const securityIframe = document.getElementById('security-iframe');
             if (securityIframe) {
                 // Set the iframe source to the Home Assistant camera dashboard
-                securityIframe.src = `${this.HA_URL}/dashboard-cameras/home?auth=${this.HA_TOKEN}&kiosk`;
+                securityIframe.src = `${this.HA_URL}/dashboard-cameras/home&kiosk`;
                 
                 // Add a loading indicator if needed
                 securityIframe.onload = () => {
