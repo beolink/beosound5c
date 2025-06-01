@@ -19,7 +19,7 @@ class UIStore {
         this.HA_URL = 'http://homeassistant.local:8123';
         this.HA_TOKEN = 'REDACTED-HA_TOKEN';
      
-        this.ENTITY = 'media_player.medierum';
+        this.ENTITY = 'media_player.church_dining';
         
         // Media info
         this.mediaInfo = {
