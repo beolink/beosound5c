@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MAC="AA:BB:CC:DD:EE:FF"
+# Load configuration from /etc/beosound5c/config.env if it exists
+CONFIG_FILE="/etc/beosound5c/config.env"
+if [[ -f "$CONFIG_FILE" ]]; then
+    # shellcheck source=/dev/null
+    source "$CONFIG_FILE"
+fi
+
+# Use environment variable with fallback
+MAC="${BEOREMOTE_MAC:-AA:BB:CC:DD:EE:FF}"
+
+# Handles for Bluetooth GATT (hardware-specific, don't change)
 DESC1="0x0025"
 DESC2="0x0026"
 
