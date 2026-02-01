@@ -17,6 +17,12 @@ const AppConfig = {
         media: 'ws://localhost:8766'
     },
 
+    // Camera overlay configuration
+    cameras: [
+        { id: 'door', title: 'Front door', entity: 'camera.front_door' },
+        { id: 'gate', title: 'Gate', entity: 'camera.gate' }
+    ],
+
     // Debug settings
     debug: {
         enabled: false,
