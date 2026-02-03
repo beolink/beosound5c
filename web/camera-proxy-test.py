@@ -14,11 +14,12 @@ import urllib.request
 import urllib.error
 from urllib.parse import urlparse, parse_qs
 import socketserver
+import os
 
-# Configuration
-HA_URL = "http://homeassistant.local:8123"
-HA_TOKEN = "REDACTED-HA_TOKEN"
-CAMERA_ENTITY = "camera.front_door"
+# Configuration - use environment variables
+HA_URL = os.getenv('HA_URL', 'http://homeassistant.local:8123')
+HA_TOKEN = os.getenv('HA_TOKEN', '')
+CAMERA_ENTITY = os.getenv('CAMERA_ENTITY', 'camera.front_door')
 PORT = 8001
 
 
