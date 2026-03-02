@@ -118,6 +118,7 @@ Credentials live separately in `/etc/beosound5c/secrets.env` (created by the ins
 | `beo-router` | [`services/router.py`](services/router.py) | Event router: dispatches remote events to HA or the active source, controls volume |
 | `beo-player-sonos` | [`services/players/sonos.py`](services/players/sonos.py) | Sonos player: artwork, metadata, playback commands, volume reporting |
 | `beo-player-bluesound` | [`services/players/bluesound.py`](services/players/bluesound.py) | BluOS player: long-poll monitoring, HTTP/XML transport controls |
+| `beo-player-local` | [`services/players/local.py`](services/players/local.py) | Local player: URL stream playback for S/PDIF, HDMI, and other outputs |
 | `beo-source-spotify` | [`services/sources/spotify/service.py`](services/sources/spotify/service.py) | Spotify: PKCE OAuth, playlist browsing, playback via player or Web API |
 | `beo-source-apple-music` | [`services/sources/apple_music/service.py`](services/sources/apple_music/service.py) | Apple Music: MusicKit API browsing and playback |
 | `beo-source-tidal` | [`services/sources/tidal/service.py`](services/sources/tidal/service.py) | TIDAL: tidalapi OAuth, playlist browsing and playback |
@@ -133,7 +134,7 @@ Service definitions: [`services/system/`](services/system/)
 
 ## Audio
 
-Each BS5c is configured with one **player** (Sonos or BlueSound) and one **volume adapter** (which controls the physical volume). The installer asks you to choose during setup.
+Each BS5c is configured with one **player** (Sonos, BlueSound, or Local) and one **volume adapter** (which controls the physical volume). The installer asks you to choose during setup.
 
 ### Player Types
 
@@ -141,19 +142,20 @@ Each BS5c is configured with one **player** (Sonos or BlueSound) and one **volum
 |---|---|---|
 | Sonos | `spotify`, `url_stream` | Any Sonos speaker (S1 or S2, any generation) |
 | BlueSound | `url_stream` | Any BluOS player (e.g. Node, PowerNode, Vault) |
+| Local | `url_stream` | S/PDIF HAT, HDMI, or other audio output |
 
 ### Source Compatibility
 
-Sources check the player's capabilities at startup to determine how to play content. Sources that play locally (CD, USB in local mode) don't need a player service at all.
+Sources check the player's capabilities at startup to determine how to play content. Sources that play locally (CD, USB) work with any player type.
 
-| Source | Sonos | BlueSound | No player (local outputs) |
+| Source | Sonos | BlueSound | Local player |
 |---|---|---|---|
-| Spotify | Yes (ShareLink) | No | No |
-| Apple Music | Yes (ShareLink) | No | No |
-| TIDAL | Yes (ShareLink) | Yes (stream URL) | No |
-| Plex | Yes (stream URL) | Yes (stream URL) | No |
+| Spotify | Yes (ShareLink) | No | Possible (needs librespot) |
+| Apple Music | Yes (ShareLink) | No | Not feasible (Apple DRM) |
+| TIDAL | Yes (ShareLink) | Yes (stream URL) | Possible (stream URLs exist) |
+| Plex | Yes (stream URL) | Yes (stream URL) | Yes (stream URL) |
 | CD | Yes (plays locally) | Yes (plays locally) | Yes |
-| USB | Yes (streams URLs) | Yes (streams URLs) | Yes (mpv fallback) |
+| USB | Yes (streams URLs) | Yes (streams URLs) | Yes |
 
 Spotify and Apple Music send share links via `uri=` which only Sonos handles (via ShareLink). TIDAL and Plex send direct stream URLs via `url=` which both players support. On Sonos, TIDAL uses ShareLink for native queue management; on BlueSound, TIDAL resolves stream URLs and manages the queue itself (like Plex).
 
@@ -163,8 +165,8 @@ Spotify and Apple Music send share links via `uri=` which only Sonos handles (vi
 |---|---|---|
 | Sonos | Sonos speaker volume | Sonos player configured |
 | BlueSound | BluOS player volume | BlueSound player configured |
-| BeoLab 5 | BeoLab 5 via sync port | BeoLab 5 Controller (ESP32) |
-| PowerLink | B&O speakers via MasterLink bus | PC2/MasterLink USB interface |
+| BeoLab 5 | BeoLab 5 via sync port | BeoLab 5 Controller |
+| PowerLink | B&O PowerLink speakers | S/PDIF HAT with COAX output |
 | HDMI | ALSA software volume on HDMI1 | Amplifier with HDMI audio input |
 | S/PDIF | ALSA software volume | S/PDIF HAT (e.g. HiFiBerry Digi) |
 | RCA | ALSA software volume | DAC HAT with RCA out |
@@ -190,7 +192,8 @@ services/                   # Backend services
 │   └── usb/                #   USB file playback (BM5 library, file browser)
 ├── players/                # External playback backends
 │   ├── sonos.py            #   Sonos (SoCo, ShareLink, artwork)
-│   └── bluesound.py        #   BluOS (HTTP/XML, long-poll)
+│   ├── bluesound.py        #   BluOS (HTTP/XML, long-poll)
+│   └── local.py            #   Local (URL streams via mpv)
 ├── lib/
 │   ├── player_base.py      # Abstract player base class
 │   ├── source_base.py      # Abstract source base class
