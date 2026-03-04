@@ -30,6 +30,26 @@ echo "📁 Target directory: $SERVICE_DIR"
 echo "👤 Install user: $INSTALL_USER ($INSTALL_HOME)"
 echo ""
 
+# Ensure the install user has the required groups:
+#   video, render - DRM/KMS display access (/dev/dri/card*)
+#   tty           - xinit console access
+#   input         - HID input devices
+#   audio         - audio device access
+echo "👥 Ensuring required group memberships for $INSTALL_USER..."
+for group in video render tty input audio; do
+    if getent group "$group" &>/dev/null; then
+        if id -nG "$INSTALL_USER" | grep -qw "$group"; then
+            echo "  ✅ Already in group: $group"
+        else
+            usermod -aG "$group" "$INSTALL_USER"
+            echo "  ✅ Added to group: $group"
+        fi
+    else
+        echo "  ⚠️  Group '$group' does not exist — skipping"
+    fi
+done
+echo ""
+
 # Create configuration directory and copy example if needed
 CONFIG_DIR="/etc/beosound5c"
 SECRETS_FILE="$CONFIG_DIR/secrets.env"

@@ -40,6 +40,20 @@ log "=== BeoSound 5c UI Service Starting ==="
 if pidof plymouthd &>/dev/null; then
   log "Telling Plymouth to quit with retained splash..."
   sudo plymouth quit --retain-splash || true
+  # Wait for Plymouth to fully release the framebuffer before X starts.
+  # Without this, X can fail with "Cannot run in framebuffer mode" because
+  # Plymouth still holds the display lock.
+  sleep 1
+fi
+
+# Check that a DRM/KMS device is available before starting X.
+# If /dev/dri/card0 is missing, vc4-kms-v3d is likely not loaded in
+# /boot/firmware/config.txt — X will fail with a framebuffer mode error.
+if ! ls /dev/dri/card* &>/dev/null; then
+  log "ERROR: No DRM device found at /dev/dri/card*. X will fail."
+  log "Fix: ensure 'dtoverlay=vc4-kms-v3d' is set in /boot/firmware/config.txt"
+  log "Also check: sudo usermod -aG video,render \$USER && reboot"
+  exit 1
 fi
 
 # Start X with a wrapper that includes crash recovery
