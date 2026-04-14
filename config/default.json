@@ -5,7 +5,7 @@
     "PLAYING": "playing",
     "JOIN": "join",
     "CD": "cd",
-    "USB": { "id": "usb", "mounts": [{ "name": "USB", "path": "/mnt/usb-music" }] },
+    "USB": "usb",
     "SPOTIFY": "spotify",
     "APPLE MUSIC": "apple_music",
     "TIDAL": "tidal",
@@ -41,7 +41,7 @@
   },
   "cd": { "device": "/dev/sr0" },
   "join": {},
-  "spotify": { "client_id": "", "source": "radio" },
-  "news": { "guardian_api_key": "test" },
-  "showing": { "entity_id": "media_player.loft_apple_tv" }
+  "spotify": { "client_id": "" },
+  "radio": { "source": "radio" },
+  "news": { "guardian_api_key": "test" }
 }
