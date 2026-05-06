@@ -43,5 +43,11 @@
   "join": {},
   "spotify": { "client_id": "" },
   "radio": { "source": "radio" },
-  "news": { "guardian_api_key": "test" }
+  "news": { "guardian_api_key": "test" },
+  "masterlink": {
+    "role": "master",
+    "ir": { "audio": true, "video": true },
+    "provider": { "nmusic_source": "", "nradio_source": "" },
+    "link": { "sources": [] }
+  }
 }
