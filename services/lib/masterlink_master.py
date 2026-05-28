@@ -172,6 +172,13 @@ class MasterRole:
             self._handle_request_local_source(src_node)
             return
 
+        # Count any inbound telegram as link presence so wants_distribute()
+        # turns True and audio_on() asserts ML distribute. Without this, a
+        # link device (e.g. BeoLab 3500) that only sends telegram types we
+        # don't yet handle (LOCK_MANAGER_COMMAND p=0x5C) is never marked
+        # present, so local-source playback never distributes audio to it.
+        self._mark_link_seen(src_node)
+
         logger.info("ML master: NO HANDLER t=0x%02X p=0x%02X from 0x%02X "
                     "payload=%s — link device may hang",
                     ttype, ptype, src_node,
