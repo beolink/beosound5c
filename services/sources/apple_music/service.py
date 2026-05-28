@@ -74,8 +74,8 @@ class AppleMusicService(DigitPlaylistMixin, SourceBase):
     name = "Apple Music"
     port = 8774
     action_map = {
-        "play": "toggle",
-        "pause": "toggle",
+        "play": "play",
+        "pause": "pause",
         "go": "toggle",
         "next": "next",
         "prev": "prev",
@@ -110,6 +110,12 @@ class AppleMusicService(DigitPlaylistMixin, SourceBase):
         if has_creds:
             self._load_playlists()
             self._detect_player()
+
+            if self.player == "local":
+                log.warning(
+                    "Apple Music is configured but the local player cannot "
+                    "decrypt Apple Music streams. Playback will fail. Use a "
+                    "Sonos (ShareLink) or BlueSound player to play Apple Music.")
 
             caps = await self.player_capabilities()
             if caps:

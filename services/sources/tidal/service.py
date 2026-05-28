@@ -73,8 +73,8 @@ class TidalService(DigitPlaylistMixin, SourceBase):
     name = "TIDAL"
     port = 8777
     action_map = {
-        "play": "toggle",
-        "pause": "toggle",
+        "play": "play",
+        "pause": "pause",
         "go": "toggle",
         "next": "next",
         "prev": "prev",
@@ -114,6 +114,12 @@ class TidalService(DigitPlaylistMixin, SourceBase):
         if has_creds:
             self._load_playlists()
             self._detect_player()
+
+            if self.player == "local":
+                log.warning(
+                    "TIDAL is configured but the local player cannot decrypt "
+                    "TIDAL streams. Playback will fail. Use a Sonos (ShareLink) "
+                    "or BlueSound player to play TIDAL.")
 
             caps = await self.player_capabilities()
             if caps:

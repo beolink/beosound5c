@@ -285,8 +285,17 @@
         // Reset fit while dimensions are unknown; applyVideoFit() finalises on loadedmetadata
         video.style.objectPosition = 'center center';
         video.style.transform = '';
-        video.src = url;
-        video.load();
+        if (typeof Hls !== 'undefined' && Hls.isSupported() && url.indexOf('.m3u8') !== -1) {
+            if (video._hls) { video._hls.destroy(); }
+            var hls = new Hls({ enableWorker: false });
+            video._hls = hls;
+            hls.loadSource(url);
+            hls.attachMedia(video);
+        } else {
+            if (video._hls) { video._hls.destroy(); video._hls = null; }
+            video.src = url;
+            video.load();
+        }
     }
 
     function loadPreferred() {
@@ -372,7 +381,10 @@
                 if (changed) {
                     var p = preferredUrl();
                     if (!p) {
-                        stopCycle();
+                        // Both URLs cleared (e.g. switched to radio). Fully
+                        // reset so the cycle can't restart with stale state
+                        // and flash a black video panel between artworks.
+                        clearVideo();
                     } else if (p !== currentUrl) {
                         // Better video available — load it; cycle picks it up
                         loadVideo(p);
