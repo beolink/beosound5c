@@ -62,7 +62,11 @@ done
 SUDOERS_FILE="/etc/sudoers.d/beosound5c"
 POST_UPDATE_PATH="$BASE_DIR/install/post-update.sh"
 
-cat > /tmp/beo-sudoers-new << EOF
+# Stage in a private root-owned mktemp file (mode 600) under /run — NOT a
+# fixed /tmp path, which a local process could swap between the visudo
+# check and the install (TOCTOU).
+SUDOERS_TMP=$(mktemp /run/beo-sudoers.XXXXXX)
+cat > "$SUDOERS_TMP" << EOF
 # BeoSound 5c — UI kiosk and config management
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/bin/pkill, /usr/bin/fbi, /usr/bin/plymouth, /sbin/reboot, /usr/sbin/reboot
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/beosound5c/config.json
@@ -73,11 +77,34 @@ $SERVICE_USER ALL=(ALL) NOPASSWD: $POST_UPDATE_PATH
 $SERVICE_USER ALL=(ALL) NOPASSWD: /bin/bash $BASE_DIR/services/system/reconcile-services.sh
 EOF
 
-visudo -c -f /tmp/beo-sudoers-new
-cp /tmp/beo-sudoers-new "$SUDOERS_FILE"
-chmod 440 "$SUDOERS_FILE"
-rm /tmp/beo-sudoers-new
+visudo -c -f "$SUDOERS_TMP"
+install -m 440 -o root -g root "$SUDOERS_TMP" "$SUDOERS_FILE"
+rm "$SUDOERS_TMP"
 log "Sudoers updated"
+
+# ── 2b. Service-writable state files ─────────────────────────────────────────
+# Token/state files under /etc/beosound5c must stay owned by the service
+# user. A root-run script (sudo fetch.py, manual auth flow) can rewrite one
+# as root:root, after which every token refresh fails with EACCES — and once
+# the service restarts it can't even read its credentials (Church, Jul 2026).
+# Self-heal ownership on every update.
+CONFIG_DIR="/etc/beosound5c"
+if [ -d "$CONFIG_DIR" ]; then
+    OWNER_FIXED=0
+    for f in "$CONFIG_DIR"/*_tokens.json "$CONFIG_DIR"/*_tokens.json.lock \
+             "$CONFIG_DIR"/*_last_played.json "$CONFIG_DIR"/*_last_station.json \
+             "$CONFIG_DIR"/*_favourites.json "$CONFIG_DIR"/config.json; do
+        [ -e "$f" ] || continue
+        if [ "$(stat -c '%U' "$f")" != "$SERVICE_USER" ]; then
+            chown "$SERVICE_USER:$SERVICE_USER" "$f"
+            log "Fixed ownership: $f"
+            OWNER_FIXED=$((OWNER_FIXED + 1))
+        fi
+    done
+    if [ "$OWNER_FIXED" -eq 0 ]; then
+        log "State file ownership OK"
+    fi
+fi
 
 # ── 3. PipeWire tone filter-chain ────────────────────────────────────────────
 # Keep /etc/pipewire/filter-chain.conf.d/53-beosound5c-tone.conf in sync

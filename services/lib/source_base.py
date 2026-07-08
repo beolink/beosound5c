@@ -564,8 +564,13 @@ class SourceBase:
         return {"tracks": [], "current_index": -1, "total": 0}
 
     async def _handle_queue_route(self, request):
-        start = int(request.query.get("start", "0"))
-        max_items = int(request.query.get("max_items", "50"))
+        try:
+            start = int(request.query.get("start", "0"))
+            max_items = int(request.query.get("max_items", "50"))
+        except ValueError:
+            return web.json_response(
+                {"error": "start and max_items must be integers"},
+                status=400, headers=self._cors_headers())
         result = await self.get_queue(start, max_items)
         return web.json_response(result, headers=self._cors_headers())
 

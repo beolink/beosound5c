@@ -486,10 +486,13 @@ async def _run_update():
         _update_step = 'restarting'
 
         # Discover active beo-* services
-        res = subprocess.run(
-            ['systemctl', 'list-units', 'beo-*.service', '--state=active',
-             '--no-legend', '--no-pager', '--plain'],
-            capture_output=True, text=True, timeout=5,
+        res = await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: subprocess.run(
+                ['systemctl', 'list-units', 'beo-*.service', '--state=active',
+                 '--no-legend', '--no-pager', '--plain'],
+                capture_output=True, text=True, timeout=5,
+            ),
         )
         services = [
             line.split()[0].removesuffix('.service')
@@ -511,12 +514,33 @@ async def _run_update():
             stderr=subprocess.DEVNULL,
         )
 
+        # _update_in_progress deliberately stays True here: the restart is
+        # imminent and this process is about to be killed. But if the
+        # detached restart never happens (e.g. missing sudoers entry, so
+        # the `sudo systemctl restart` inside the bash -c fails), the flag
+        # would otherwise stay True forever and /update/run would 409 on
+        # every retry. Clear it after a generous deadline — if we're still
+        # alive by then, the restart didn't happen.
+        _background_tasks.spawn(_clear_update_flag_after_deadline(),
+                                name='update_restart_deadline')
+
     except Exception as e:
         logger.error('[update] Failed: %s', e)
         _update_in_progress = False
         _update_step = 'idle'
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+async def _clear_update_flag_after_deadline(deadline: float = 120.0):
+    """Reset the update flag if the scheduled restart never killed us."""
+    global _update_in_progress, _update_step
+    await asyncio.sleep(deadline)
+    if _update_in_progress:
+        logger.warning('[update] Service restart did not happen within %.0fs '
+                       '— clearing update-in-progress flag', deadline)
+        _update_in_progress = False
+        _update_step = 'idle'
 
 
 async def handle_update_check(request):
@@ -1129,6 +1153,7 @@ async def handle_camera_stream(request):
     # Get camera entity from query params, default to doorbell
     entity = request.query.get('entity', 'camera.front_door')
 
+    response = None
     try:
         session = await get_http_session()
         headers = {'Authorization': f'Bearer {ha_token}'} if ha_token else {}
@@ -1136,7 +1161,13 @@ async def handle_camera_stream(request):
         camera_url = f'{ha_url}/api/camera_proxy_stream/{entity}'
         logger.info('Proxying camera stream from: %s', camera_url)
 
-        async with session.get(camera_url, headers=headers) as resp:
+        # Per-request timeout: the shared session's default total=300 would
+        # kill the MJPEG stream at exactly 5 minutes. No total limit while
+        # streaming — only a per-read timeout so a dead camera still errors.
+        async with session.get(
+            camera_url, headers=headers,
+            timeout=aiohttp.ClientTimeout(total=None, sock_connect=10, sock_read=30),
+        ) as resp:
             if resp.status == 200:
                 response = web.StreamResponse(
                     status=200,
@@ -1161,6 +1192,10 @@ async def handle_camera_stream(request):
                 )
     except Exception as e:
         logger.error('Camera error: %s', e)
+        if response is not None and response.prepared:
+            # Stream already started — headers are sent, so a second
+            # (JSON) response is impossible. Just end the stream.
+            return response
         return web.json_response(
             {'error': str(e)},
             status=500,

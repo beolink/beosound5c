@@ -15,7 +15,7 @@
 
 class MenuManager {
     constructor() {
-        const c = window.Constants || {};
+        const c = (typeof window !== 'undefined' && window.Constants) || {};
         this.radius = c.arc?.radius || 1000;
         this.angleStep = c.arc?.menuAngleStep || 5;
 
@@ -84,7 +84,17 @@ class MenuManager {
 
         this._menuLoaded = false;
         this._menuRetries = 0;
-        this._lastSelectedPath = null;
+        this._lastSelectedPath = null;  // highlight state (bolded item)
+        this._lastClickedPath = null;   // last item a click was fired for
+
+        // Deferred eviction of the current route after a menu rebuild.
+        // After a router restart, dynamic sources start in state "gone" and
+        // are omitted from /router/menu until their service re-registers a
+        // few seconds later — so a missing route right after a rebuild is
+        // usually transient. Grace period before we actually evict:
+        this._evictionGraceMs = c.timeouts?.menuEvictionGrace || 12000;
+        this._evictionTimer = null;
+        this._evictionRoute = null;
 
         // Callbacks wired by UIStore
         this.onNavigate = null;      // (path) => void
@@ -147,6 +157,11 @@ class MenuManager {
                 window.LaserPositionMapper.updateMenuItems(this.menuItems);
             }
 
+            // The rebuild may have dropped the view currently on screen
+            // (e.g. router restarted with a source removed) — navigate away
+            // and clean up, same as removeMenuItem() does.
+            this._cleanupRemovedRoute();
+
             this._menuLoaded = true;
             this._menuRetries = 0;
 
@@ -166,6 +181,64 @@ class MenuManager {
                 console.log('[MENU] Router unavailable after 15 attempts, using defaults');
             }
         }
+    }
+
+    /**
+     * If the current route's menu entry no longer exists (after a wholesale
+     * menu rebuild), schedule an eviction: navigate to an existing view and
+     * drop the stale view definition — otherwise the user is stranded on a
+     * ghost view that no laser position maps to.
+     *
+     * The eviction is DEFERRED, not immediate: fetchMenu() fires on every
+     * media-WS reconnect, and right after a beo-router restart the menu
+     * momentarily lacks dynamic sources (they re-register seconds later).
+     * Evicting immediately would kick the user off SPOTIFY/RADIO/JOIN during
+     * every deploy/OTA/config save. Instead we start a grace timer; if a
+     * later fetchMenu()/menu update shows the route back, the timer is
+     * cancelled (and the fire-time re-check below also verifies against the
+     * CURRENT menu, so a route restored via addMenuItem() survives too).
+     * Explicit removals via removeMenuItem() still evict immediately.
+     */
+    _cleanupRemovedRoute() {
+        const route = this._currentRoute;
+        if (!route || this.menuItems.some(m => m.path === route)) {
+            // Route present (or nothing on screen) — cancel any pending eviction
+            this._cancelPendingEviction();
+            return;
+        }
+
+        if (this._evictionTimer) {
+            if (this._evictionRoute === route) return; // grace timer already running
+            this._cancelPendingEviction();             // pending for a stale route
+        }
+
+        console.log(`[MENU] Current view ${route} missing after menu rebuild — evicting in ${this._evictionGraceMs / 1000}s unless it returns`);
+        this._evictionRoute = route;
+        this._evictionTimer = setTimeout(() => {
+            this._evictionTimer = null;
+            const pending = this._evictionRoute;
+            this._evictionRoute = null;
+
+            // Re-check against CURRENT state at fire time — never evict on
+            // stale data. User navigated away themselves, or the route came
+            // back (fetchMenu rebuild or addMenuItem broadcast) → no-op.
+            if (this._currentRoute !== pending) return;
+            if (this.menuItems.some(m => m.path === pending)) return;
+
+            console.log(`[MENU] Current view ${pending} still missing after grace period — navigating away`);
+            if (this.onNavigate) {
+                this.onNavigate('menu/playing');
+                this._currentRoute = 'menu/playing';
+            }
+            delete this.views[pending];
+        }, this._evictionGraceMs);
+    }
+
+    _cancelPendingEviction() {
+        if (!this._evictionTimer) return;
+        clearTimeout(this._evictionTimer);
+        this._evictionTimer = null;
+        this._evictionRoute = null;
     }
 
     /**
@@ -318,9 +391,22 @@ class MenuManager {
 
     // ── Rendering ──
 
+    /**
+     * Angle step between menu items. Delegates to LaserPositionMapper so the
+     * visual arc and the laser selection zones always use the same spacing
+     * (it compresses below the default 5° when the menu grows — see
+     * getMenuAngleStepFor in laser-position-mapper.js).
+     */
+    getAngleStep() {
+        const mapper = (typeof window !== 'undefined' && window.LaserPositionMapper) || null;
+        return mapper?.getMenuAngleStepFor
+            ? mapper.getMenuAngleStepFor(this.menuItems.length)
+            : this.angleStep;
+    }
+
     getStartItemAngle() {
         const visibleCount = this.menuItems.length;
-        const totalSpan = this.angleStep * (visibleCount - 1);
+        const totalSpan = this.getAngleStep() * (visibleCount - 1);
         return 180 - totalSpan / 2;
     }
 
@@ -348,13 +434,14 @@ class MenuManager {
         menuContainer.innerHTML = '';
 
         const visibleItems = this.menuItems;
+        const angleStep = this.getAngleStep();
         visibleItems.forEach((item, index) => {
             const itemElement = document.createElement('div');
             itemElement.className = 'list-item';
             itemElement.dataset.path = item.path;
             itemElement.textContent = item.title;
 
-            const itemAngle = this.getStartItemAngle() + (visibleItems.length - 1 - index) * this.angleStep;
+            const itemAngle = this.getStartItemAngle() + (visibleItems.length - 1 - index) * angleStep;
             const position = arcs.getArcPoint(this.radius, 20, itemAngle);
             itemElement.dataset.angle = String(itemAngle);
 
@@ -391,10 +478,21 @@ class MenuManager {
             }
         });
 
-        // Click exactly when the bolded item changes — one click per highlight change
-        const changed = selectedPath && selectedPath !== this._lastSelectedPath;
         this._lastSelectedPath = selectedPath;
-        return changed; // caller sends click command
+        return this._shouldClick(selectedPath); // caller sends click command
+    }
+
+    /**
+     * Decide whether a highlight change should fire a click. Clicks fire
+     * only on a transition to a DIFFERENT item than the last one clicked —
+     * not on the first highlight after boot, and not when re-entering the
+     * same item after an excursion through an overlay/gap zone (path null).
+     */
+    _shouldClick(selectedPath) {
+        const changed = !!(selectedPath && this._lastClickedPath &&
+                           selectedPath !== this._lastClickedPath);
+        if (selectedPath) this._lastClickedPath = selectedPath;
+        return changed;
     }
 
     // ── Dynamic add/remove ──
@@ -464,13 +562,14 @@ class MenuManager {
         // --- Rebuild DOM ---
         menuContainer.innerHTML = '';
         const visibleItems = this.menuItems;
+        const angleStep = this.getAngleStep();
         visibleItems.forEach((item, index) => {
             const itemElement = document.createElement('div');
             itemElement.className = 'list-item';
             itemElement.dataset.path = item.path;
             itemElement.textContent = item.title;
 
-            const itemAngle = this.getStartItemAngle() + (visibleItems.length - 1 - index) * this.angleStep;
+            const itemAngle = this.getStartItemAngle() + (visibleItems.length - 1 - index) * angleStep;
             const position = arcs.getArcPoint(this.radius, 20, itemAngle);
             itemElement.dataset.angle = String(itemAngle);
 
@@ -514,4 +613,10 @@ class MenuManager {
     }
 }
 
-window.MenuManager = MenuManager;
+if (typeof module !== 'undefined' && module.exports) {
+    // Node.js environment (unit tests)
+    module.exports = { MenuManager };
+} else {
+    // Browser environment
+    window.MenuManager = MenuManager;
+}

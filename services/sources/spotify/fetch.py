@@ -25,7 +25,12 @@ sys.path.insert(0, os.path.join(PROJECT_ROOT, 'services'))
 
 from spotify_auth import get_access_token, missing_scopes
 from spotify_tokens import load_tokens
-from lib.digit_playlists import detect_digit_playlist, build_digit_mapping
+from lib.digit_playlists import (
+    detect_digit_playlist,
+    build_digit_mapping,
+    load_digit_pins,
+    spotify_favourites_path,
+)
 
 # Scopes the app currently asks for.  Kept in sync with SPOTIFY_SCOPES in
 # service.py — duplicating the literal here keeps fetch.py runnable
@@ -86,6 +91,26 @@ def _spotify_get(token, url, *, timeout=10):
 
 DIGIT_PLAYLISTS_FILE = os.path.join(PROJECT_ROOT, 'web', 'json', 'digit_playlists.json')
 DEFAULT_OUTPUT_FILE = os.path.join(PROJECT_ROOT, 'web', 'json', 'spotify_playlists.json')
+
+
+def should_refuse_shrink(force, cached_count, final_count, list_error,
+                         fetched_failed):
+    """Decide whether to refuse overwriting the cache with a much-smaller
+    playlist set.
+
+    Refuse only when the shrink is large (cache >= 4 and result < half of
+    it) AND this run actually had problems — a list-level error from
+    ``GET /me/playlists`` or failed per-playlist track fetches.  A *clean*
+    fetch that comes back much smaller means the user really pruned their
+    library, and we must write it: refusing would wedge the cache forever,
+    since every automatic refresh path (view-open, startup, nightly,
+    ``refresh_playlists`` command) runs without ``--force``.
+    """
+    if force:
+        return False
+    if not (cached_count >= 4 and final_count < cached_count // 2):
+        return False
+    return bool(list_error) or fetched_failed > 0
 
 
 def log(msg):
@@ -502,20 +527,29 @@ def main():
     cached_count = len(cache)
 
     # Refuse to overwrite a healthy cache with a result that's drastically
-    # smaller — a sudden drop almost always means an upstream auth/scope/
-    # rate-limit issue rather than the user actually deleting half their
-    # library.  The user can always force the write with --force.
-    if (not force and cached_count >= 4
-            and final_count < cached_count // 2):
+    # smaller — but only when this run actually had problems (list-level
+    # error or failed track fetches), i.e. the drop looks like an upstream
+    # auth/scope/rate-limit issue.  A clean run that returns far fewer
+    # playlists means the user really deleted them; refusing then would
+    # wedge the cache forever (no automatic refresh passes --force).
+    big_shrink = cached_count >= 4 and final_count < cached_count // 2
+    if should_refuse_shrink(force, cached_count, final_count,
+                            list_error, fetched_failed):
         log(f"WARNING: result has {final_count} playlists but cache had "
-            f"{cached_count} — refusing to overwrite (likely auth, scope, "
-            f"or rate-limit issue).  Re-run with --force to override.")
+            f"{cached_count} and this run had errors "
+            f"(list_error={list_error!r}, fetched_failed={fetched_failed}) "
+            f"— refusing to overwrite (likely auth, scope, or rate-limit "
+            f"issue).  Re-run with --force to override.")
         log(f"=== Summary: liked={1 if liked_playlist else 0}, "
             f"playlists_from_api={len(all_playlists)}, "
             f"fetched_ok={fetched_ok}, fetched_failed={fetched_failed}, "
             f"kept_from_cache={skipped + kept_from_cache_on_error}, "
             f"dropped_empty={dropped_empty}, written=0 (refused) ===")
         return 0
+    if big_shrink and not force:
+        log(f"NOTE: playlist count shrank {cached_count} -> {final_count} "
+            f"on a clean fetch — trusting Spotify (user pruned their "
+            f"library) and writing the smaller set.")
 
     # Skip write if nothing changed.  fetched_ok counts successful
     # network fetches; if none ran, none of `skipped` changed, and the
@@ -541,13 +575,20 @@ def main():
     os.replace(_tmp, output_file)
     log(f"Saved {final_count} playlists to {output_file}")
 
-    # Build digit mapping: pinned names first, then fill alphabetically.
-    digit_mapping = build_digit_mapping(playlists_with_tracks)
+    # Build digit mapping: explicit Config-UI pins first, then name-
+    # convention pins ("5: Dinner"), then fill alphabetically.
+    pins = load_digit_pins(spotify_favourites_path(SCRIPT_DIR))
+    digit_mapping = build_digit_mapping(playlists_with_tracks, pins=pins)
     with open(DIGIT_PLAYLISTS_FILE, 'w') as f:
         json.dump(digit_mapping, f, indent=2)
-    pinned = sum(1 for d in "0123456789"
-                 if d in digit_mapping and detect_digit_playlist(digit_mapping[d]['name']) is not None)
-    log(f"Saved digit playlists ({pinned} pinned, {len(digit_mapping) - pinned} auto-filled)")
+    explicit = sum(1 for d, e in digit_mapping.items()
+                   if pins.get(d, {}).get('id') == e['id'])
+    named = sum(1 for d, e in digit_mapping.items()
+                if pins.get(d, {}).get('id') != e['id']
+                and detect_digit_playlist(e['name']) is not None)
+    log(f"Saved digit playlists ({explicit} pinned via config, "
+        f"{named} pinned by name, "
+        f"{len(digit_mapping) - explicit - named} auto-filled)")
 
     # Single-line summary so support / log greps don't have to reconstruct
     # the run from a dozen scattered lines.

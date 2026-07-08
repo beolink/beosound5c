@@ -735,6 +735,8 @@ class CDService(SourceBase):
         "up": "next",
         "down": "prev",
         "stop": "stop",
+        # Beo4 RANDOM key (0xC1) toggles shuffle while CD is active
+        "random": "toggle_shuffle",
         "info": "announce",
         "track": "announce",
         "menu": "announce",

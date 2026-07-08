@@ -56,6 +56,8 @@ class USBService(SourceBase):
         "right": "next",
         "left": "prev",
         "stop": "stop",
+        # Beo4 RANDOM key (0xC1) toggles shuffle while USB is active
+        "random": "toggle_shuffle",
         # Album skip on the Beo4 colour keys (BM5 library only) — claimed
         # only while USB is the active source, so no clash with radio's
         # favourite bindings on other sources.

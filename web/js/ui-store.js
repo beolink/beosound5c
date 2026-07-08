@@ -317,7 +317,7 @@ class UIStore {
 
             const children = Array.from(clickedItem.parentElement.children);
             const index = children.indexOf(clickedItem);
-            const itemAngle = this.menu.getStartItemAngle() + (children.length - 1 - index) * this.menu.angleStep;
+            const itemAngle = this.menu.getStartItemAngle() + (children.length - 1 - index) * this.menu.getAngleStep();
             this.wheelPointerAngle = itemAngle;
             if (window.LaserPositionMapper) {
                 this.laserPosition = Math.round(window.LaserPositionMapper.angleToLaserPosition(itemAngle));

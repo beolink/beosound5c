@@ -26,7 +26,11 @@ TimeoutStopSec=2
 # clean shutdown, not a failure. Without this, every stop/restart marks
 # the unit failed and counts against StartLimitBurst.
 SuccessExitStatus=KILL
-Restart=on-failure
+# Restart=always, NOT on-failure: SuccessExitStatus=KILL also classifies a
+# kernel OOM SIGKILL as "success", so on-failure would leave a black screen
+# after an OOM kill. `systemctl stop` never triggers Restart= regardless of
+# mode, so intentional stops still stay stopped.
+Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal

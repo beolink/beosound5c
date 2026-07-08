@@ -562,6 +562,16 @@ class EventRouter:
         if action in ("off", "alloff") and (is_local or device_type == "All"):
             logger.info("-> standby (%s)", action)
             self._spawn(self._player_stop(), name="off_stop")
+            # Also stop the active source directly.  The player-service
+            # stop above only covers playback going through the player on
+            # :8766 — on player.type "none" devices that service doesn't
+            # exist, and a source playing through its own local pipeline
+            # (in-process mpv in USB/CD) isn't covered either.  Both stop
+            # paths are idempotent, so belt and braces is safe.
+            if active and "stop" in active.handles:
+                self._spawn(
+                    self._forward_to_source(active, {**payload, "action": "stop"}),
+                    name="off_source_stop")
             if self._volume:
                 self._spawn(self._volume.power_off(), name="off_power")
             self._spawn(self._screen_off(), name="off_screen")
@@ -1197,8 +1207,12 @@ async def handle_status(request: web.Request) -> web.Response:
 
 
 async def handle_queue(request: web.Request) -> web.Response:
-    start = int(request.query.get("start", "0"))
-    max_items = int(request.query.get("max_items", "50"))
+    try:
+        start = int(request.query.get("start", "0"))
+        max_items = int(request.query.get("max_items", "50"))
+    except ValueError:
+        return web.json_response(
+            {"error": "start and max_items must be integers"}, status=400)
 
     source = router_instance.registry.active_source
     source_queue_url = None

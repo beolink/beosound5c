@@ -25,14 +25,18 @@ log = logging.getLogger('beo-source-apple-music')
 
 # ── Developer Token ──
 # Extracted from Music Assistant (Apache 2.0) — music_assistant/helpers/app_vars.py, app_var(8)
-# Last updated: 2026-02-23
-# Expires: 2026-04-23
+# (verified from release 2.9.5; live-checked against api.music.apple.com)
+# Last updated: 2026-07-07
+# Expires: 2026-10-22
 # To refresh: check https://github.com/music-assistant/server for latest release,
 #   find music_assistant/helpers/app_vars.py, decode app_var(8) and paste here.
+#   Note: MA's dev branch is moving credentials into a build-time app_secrets.json
+#   (key "apple_music_token") bundled in the PyPI wheel/Docker image — if
+#   app_vars.py no longer contains the blob, extract from the wheel instead.
 DEVELOPER_TOKEN = (
     "eyJhbGciOiJFUzI1NiIsImtpZCI6IkFSRzJSN0xEOTkiLCJ0eXAiOiJKV1QifQ."
-    "eyJpc3MiOiJHVVlGQUs4REM2IiwiZXhwIjoxNzc2OTExNzI1LCJpYXQiOjE3NjExMzQ3MjV9."
-    "AS3xyKE5NnQh6EmKJD2MmFk4JLX-mxmBnfi3_4Kl2S0cgP5wn4JCtMUuQeNs2xnc1fWX0M3-T0FVX6NJMbtcdw"
+    "eyJpc3MiOiJHVVlGQUs4REM2IiwiZXhwIjoxNzkyNzA0NTEzLCJpYXQiOjE3NzY5Mjc1MTN9."
+    "MMnlSyXIrg5zWrogOunqcYgTzGBMr7otVBtGqU-ATbkvydnHydyWbhw-IJZV4pvE41OdyNrdLuC8Vd9oSPbC6Q"
 )
 
 

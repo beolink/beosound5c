@@ -1113,7 +1113,17 @@ class MediaServer(PlayerBase):
             if now - last >= REFRESH_COOLDOWN:
                 self._network_refresh_time = now
                 loop = asyncio.get_running_loop()
-                loop.run_in_executor(netcheck_executor, self._check_all_devices_sync)
+
+                async def _refresh_network():
+                    # Wrapped in a coroutine and routed through _spawn so
+                    # BackgroundTaskSet logs any escaping exception instead
+                    # of it surfacing as "Future exception was never
+                    # retrieved" (a bare run_in_executor future is
+                    # fire-and-forget with no done-callback).
+                    await loop.run_in_executor(
+                        netcheck_executor, self._check_all_devices_sync)
+
+                self._spawn(_refresh_network(), name="network_refresh")
             return web.json_response(cache, headers=self._cors_headers())
 
         # First call — must block (but capped at DEVICE_TIMEOUT)

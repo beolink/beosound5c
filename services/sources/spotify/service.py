@@ -36,7 +36,13 @@ from pkce import (
 
 from lib.config import cfg
 from lib.source_base import SourceBase
-from lib.digit_playlists import DigitPlaylistMixin
+from lib.digit_playlists import (
+    DigitPlaylistMixin,
+    DIGIT_SLOTS,
+    build_digit_mapping,
+    load_digit_pins,
+    spotify_favourites_path,
+)
 from lib.spotify_canvas import SpotifyCanvasClient, normalize_spotify_track_uri
 
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
@@ -138,8 +144,14 @@ class SpotifyService(DigitPlaylistMixin, SourceBase):
         self._display_name = None  # Spotify display name from /v1/me
         self._canvas = SpotifyCanvasClient()  # reads SPOTIFY_SP_DC from env
         self._shuffle_on = False  # our view of the player's shuffle state
+        self._favourite_pins = {}  # digit slot -> {id, name} from the Config UI
 
     async def on_start(self):
+        # Digit pins from the Config UI — independent of Spotify creds.
+        self._favourite_pins = load_digit_pins(self._favourites_path())
+        if self._favourite_pins:
+            log.info("Loaded %d favourite digit pins", len(self._favourite_pins))
+
         # Load credentials (may fail — setup flow will handle it)
         has_creds = self.auth.load(config_client_id=cfg("spotify", "client_id", default=""))
 
@@ -284,6 +296,11 @@ class SpotifyService(DigitPlaylistMixin, SourceBase):
 
     def add_routes(self, app):
         app.router.add_get('/playlists', self._handle_playlists)
+        app.router.add_get('/favourites', self._handle_favourites_list)
+        app.router.add_post('/favourites', self._handle_favourites_save)
+        # CORS preflight — the Config UI is served from port 80 and POSTs
+        # JSON here, so browsers send an OPTIONS check first.
+        app.router.add_options('/favourites', self._handle_cors)
         app.router.add_get('/token', self._handle_token)
         app.router.add_get('/canvas', self._handle_canvas)
         app.router.add_get('/setup-status', self._handle_setup_status)
@@ -1054,6 +1071,96 @@ class SpotifyService(DigitPlaylistMixin, SourceBase):
 
         return web.json_response(
             self.playlists,
+            headers=self._cors_headers())
+
+    # ── Favourites (explicit digit pins from the Config UI) ──
+    # Same persistence conventions as radio's radio_favourites.json:
+    # /etc/beosound5c in prod, a file next to the service in dev,
+    # atomic tmp+replace writes.
+
+    def _favourites_path(self) -> str:
+        return spotify_favourites_path(os.path.dirname(os.path.abspath(__file__)))
+
+    def _save_favourite_pins(self):
+        path = self._favourites_path()
+        try:
+            tmp = path + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(self._favourite_pins, f, indent=2)
+            os.replace(tmp, path)
+            log.info("Saved %d favourite pins to %s",
+                     len(self._favourite_pins), path)
+        except Exception as e:
+            log.warning("Failed to save favourite pins: %s", e)
+
+    def _rebuild_digit_mapping(self) -> bool:
+        """Regenerate web/json/digit_playlists.json from the in-memory
+        playlist cache + current pins — no refetch needed.  Returns False
+        when there is no playlist cache to build from (the pins file is
+        still saved; the next fetch.py run will honour it)."""
+        if not self.playlists:
+            self._load_playlists()
+        if not self.playlists:
+            log.warning("No playlist cache — digit mapping unchanged "
+                        "until the next playlist refresh")
+            return False
+        try:
+            mapping = build_digit_mapping(self.playlists,
+                                          pins=self._favourite_pins)
+            tmp = self.DIGIT_PLAYLISTS_FILE + '.tmp'
+            with open(tmp, 'w') as f:
+                json.dump(mapping, f, indent=2)
+            os.replace(tmp, self.DIGIT_PLAYLISTS_FILE)
+        except Exception as e:
+            log.warning("Failed to rebuild digit mapping: %s", e)
+            return False
+        self._reload_digit_playlists()
+        log.info("Rebuilt digit mapping (%d slots, %d explicit pins)",
+                 len(mapping), len(self._favourite_pins))
+        return True
+
+    async def _handle_favourites_list(self, request):
+        """Return the current digit pins for the Config UI."""
+        return web.json_response(
+            {'favourites': dict(self._favourite_pins)},
+            headers=self._cors_headers())
+
+    async def _handle_favourites_save(self, request):
+        """Replace the digit pins.  Body: {"favourites": {slot: {id, name}}}.
+
+        Empty/null slot entries mean "unpinned" (automatic mapping).  On
+        success the digit_playlists.json mapping is regenerated from the
+        cached playlists so the change takes effect immediately.
+        """
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({'error': 'invalid json'}, status=400,
+                                     headers=self._cors_headers())
+        raw = data.get('favourites')
+        if not isinstance(raw, dict):
+            return web.json_response({'error': 'favourites object required'},
+                                     status=400, headers=self._cors_headers())
+        pins = {}
+        for slot, entry in raw.items():
+            if not (isinstance(slot, str) and len(slot) == 1
+                    and slot in DIGIT_SLOTS):
+                return web.json_response(
+                    {'error': f'invalid slot {slot!r}'},
+                    status=400, headers=self._cors_headers())
+            if not entry:
+                continue  # unpinned slot
+            if not (isinstance(entry, dict) and entry.get('id')):
+                return web.json_response(
+                    {'error': f'slot {slot}: id required'},
+                    status=400, headers=self._cors_headers())
+            pins[slot] = {'id': str(entry['id']),
+                          'name': str(entry.get('name', ''))}
+        self._favourite_pins = pins
+        self._save_favourite_pins()
+        rebuilt = self._rebuild_digit_mapping()
+        return web.json_response(
+            {'ok': True, 'pinned': len(pins), 'rebuilt': rebuilt},
             headers=self._cors_headers())
 
     # -- OAuth Setup routes --

@@ -156,6 +156,10 @@ xinit /bin/bash -c '
   (
     while true; do
       sleep 30
+      # Exit when the X-session client shell that spawned us is gone —
+      # otherwise each outer-loop X restart leaks another watchdog, and
+      # every leaked copy pkills Chromium on a mode mismatch.
+      kill -0 $$ 2>/dev/null || exit 0
       HDMI_LINE=$(xrandr --query 2>/dev/null | grep "^HDMI-1 ")
       # Skip if output is intentionally off (no "WxH+X+Y" geometry).
       echo "$HDMI_LINE" | grep -qE "[0-9]+x[0-9]+\+[0-9]+\+[0-9]+" || continue
@@ -169,10 +173,12 @@ xinit /bin/bash -c '
       fi
     done
   ) &
+  WATCHDOG_PID=$!
 
-  # Stop crash recovery loop on SIGTERM
+  # Stop crash recovery loop on SIGTERM (also reap the resolution watchdog —
+  # $WATCHDOG_PID expands when the trap is SET, so it must be assigned above)
   STOPPING=0
-  trap "STOPPING=1; pkill -9 chromium 2>/dev/null; exit 0" SIGTERM SIGINT
+  trap "STOPPING=1; kill $WATCHDOG_PID 2>/dev/null; pkill -9 chromium 2>/dev/null; exit 0" SIGTERM SIGINT
 
   log "X session started, launching Chromium with crash recovery..."
 
@@ -215,6 +221,7 @@ xinit /bin/bash -c '
     # Bail out if X died — outer loop will restart the full X session
     if ! xset q &>/dev/null; then
       log "X server is gone. Exiting inner loop to restart X..."
+      kill "$WATCHDOG_PID" 2>/dev/null
       exit 1
     fi
 
