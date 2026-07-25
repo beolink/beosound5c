@@ -38,10 +38,11 @@ def share_url_to_uri(url: str) -> str | None:
 class LibrespotClient:
     """Client for go-librespot's local HTTP API + WebSocket event stream."""
 
-    def __init__(self, on_event=None):
+    def __init__(self, on_event=None, on_connect=None):
         self._session: aiohttp.ClientSession | None = None
         self._ws_task: asyncio.Task | None = None
         self._on_event = on_event  # async callback(event_type: str, data: dict)
+        self._on_connect = on_connect  # async callback() — fired on every WS (re)connect
         self.device_id: str | None = None
         self.connected = False
 
@@ -193,6 +194,13 @@ class LibrespotClient:
                     await self.check_available()
                     log.info("go-librespot event stream connected")
                     retry_delay = 1
+                    # Events during an outage are gone — let the owner
+                    # reconcile against /status instead of trusting stale state
+                    if self._on_connect:
+                        try:
+                            await self._on_connect()
+                        except Exception as e:
+                            log.warning("on_connect callback failed: %s", e)
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
                             await self._handle_ws_message(msg.data)

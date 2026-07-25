@@ -68,7 +68,6 @@ if [ ! -f "$SECRETS_FILE" ]; then
     if [ -f "$SECRETS_EXAMPLE" ]; then
         echo "  ✅ Copying secrets.env.example to $SECRETS_FILE"
         cp "$SECRETS_EXAMPLE" "$SECRETS_FILE"
-        chmod 600 "$SECRETS_FILE"
         echo ""
         echo "  ⚠️  IMPORTANT: Edit $SECRETS_FILE with credentials for this device!"
         echo "     - HA_TOKEN: Home Assistant long-lived access token"
@@ -79,6 +78,13 @@ if [ ! -f "$SECRETS_FILE" ]; then
     fi
 else
     echo "  ℹ️  Secrets file already exists at $SECRETS_FILE"
+fi
+
+# The service user owns secrets.env — beo-input writes credentials from the web
+# setup UI directly. Applied every run so older root-owned files are fixed too.
+if [ -f "$SECRETS_FILE" ]; then
+    chown "$INSTALL_USER:$INSTALL_USER" "$SECRETS_FILE"
+    chmod 600 "$SECRETS_FILE"
 fi
 
 if [ ! -f "$CONFIG_DIR/config.json" ]; then

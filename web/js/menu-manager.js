@@ -250,7 +250,13 @@ class MenuManager {
             if (existing) existing.remove();
 
             const script = document.createElement('script');
-            script.src = `sources/${preset}/view.js`;
+            // BEO_ASSET_V is set when this copy of the UI is served from a
+            // static host that caches assets for hours (the website emulator).
+            // Without it, a visitor can end up running a stale view script
+            // against freshly deployed core JS. Unset on a device, where
+            // beo-http sends no-store anyway.
+            const v = window.BEO_ASSET_V ? `?v=${window.BEO_ASSET_V}` : '';
+            script.src = `sources/${preset}/view.js${v}`;
             script.dataset.preset = preset;
             script.onload = () => {
                 console.log(`[MENU] Loaded source script: ${preset}`);

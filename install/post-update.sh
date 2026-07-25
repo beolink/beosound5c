@@ -222,4 +222,66 @@ EOF
         || log "could not enable yt-dlp update timer"
 fi
 
+# ── Hand secrets.env to the service user ──────────────────────────────────────
+# beo-input writes credentials entered in the web setup UI directly to this
+# file now (services/input.py:_write_secrets_sync). Older installs left it
+# root-owned, where the write silently failed unless the distro happened to
+# grant the user blanket NOPASSWD sudo. systemd reads EnvironmentFile as root,
+# so ownership by the service user costs nothing.
+SECRETS_ENV="/etc/beosound5c/secrets.env"
+if [ -f "$SECRETS_ENV" ]; then
+    if [ "$(stat -c '%U' "$SECRETS_ENV")" != "$SERVICE_USER" ]; then
+        chown "$SERVICE_USER:$SERVICE_USER" "$SECRETS_ENV"
+        log "secrets.env now owned by $SERVICE_USER"
+    fi
+    chmod 600 "$SECRETS_ENV"
+fi
+
+# ── Mark pre-web-setup devices as already set up ──────────────────────────────
+# The startup beacon now waits for `setup_complete` so a fresh install never
+# pings before its owner has seen the telemetry toggle (services/lib/beacon.py).
+# Devices configured before that flag existed have no key at all — they were
+# set up by hand, so record that instead of going quiet. A config that says
+# false explicitly is a fresh install still awaiting setup: leave it alone.
+CONFIG_JSON="/etc/beosound5c/config.json"
+if [ -f "$CONFIG_JSON" ]; then
+    python3 - "$CONFIG_JSON" << 'PYEOF' && log "setup_complete migration checked"
+import json
+import os
+import sys
+import tempfile
+
+path = sys.argv[1]
+try:
+    with open(path) as f:
+        config = json.load(f)
+except (OSError, ValueError) as e:
+    print(f"[post-update] could not read {path}: {e}")
+    sys.exit(0)
+
+if not isinstance(config, dict) or 'setup_complete' in config:
+    sys.exit(0)
+
+config['setup_complete'] = True
+directory = os.path.dirname(path)
+fd, tmp = tempfile.mkstemp(dir=directory, prefix='.config.json.')
+try:
+    with os.fdopen(fd, 'w') as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+        f.write('\n')
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, path)
+    print('[post-update] marked existing config as setup_complete')
+except Exception:
+    os.unlink(tmp)
+    raise
+PYEOF
+fi
+
+# ── Remove the guest Samba share older installs created ──────────────────────
+# See install/modules/samba-cleanup.sh — no-op once it has run.
+if [ -x "$BASE_DIR/install/modules/samba-cleanup.sh" ]; then
+    bash "$BASE_DIR/install/modules/samba-cleanup.sh" || log "samba cleanup failed (non-fatal)"
+fi
+
 log "Done"

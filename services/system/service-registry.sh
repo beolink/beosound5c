@@ -4,6 +4,8 @@
 # Sourced by install-services.sh and status-services.sh.
 
 # All service unit files (for install / copy / final status)
+# shellcheck disable=SC2034  # every array here is consumed by sourcing scripts
+
 ALL_SERVICES=(
     "beo-http.service"
     "beo-player-sonos.service"

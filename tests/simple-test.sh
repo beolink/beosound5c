@@ -19,7 +19,7 @@ if curl -s http://localhost:8000 >/dev/null 2>&1; then
     echo "✅ Web server is running on port 8000"
 else
     echo "🌐 Starting web server..."
-    cd web
+    cd web || exit 1
     python3 -m http.server 8000 &
     WEB_PID=$!
     cd ..

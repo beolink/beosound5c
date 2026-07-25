@@ -1,0 +1,182 @@
+{
+ "": {
+  "path": "",
+  "parent": null,
+  "name": "Radio",
+  "items": [
+   {
+    "type": "category",
+    "name": "Popular",
+    "id": "popular",
+    "path": "popular",
+    "icon": "star",
+    "color": "#F9CA24"
+   },
+   {
+    "type": "category",
+    "name": "Favourites",
+    "id": "favourites",
+    "path": "favourites",
+    "icon": "heart",
+    "color": "#FF6B6B"
+   },
+   {
+    "type": "category",
+    "name": "Genres",
+    "id": "genres",
+    "path": "genres",
+    "icon": "music-notes",
+    "color": "#FD79A8"
+   }
+  ]
+ },
+ "popular": {
+  "path": "popular",
+  "parent": "",
+  "name": "Popular",
+  "items": [
+   {
+    "type": "station",
+    "name": "BBC Radio 3",
+    "id": "demo-bbc-radio-3",
+    "path": "station/bbc-radio-3",
+    "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMjAsNDUlLDM0JSkiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9ImhzbCg2MCw1MCUsMTMlKSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSJ1cmwoI2cpIi8+PHRleHQgeD0iNTAlIiB5PSI0NyUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiNmZmYiIGZvbnQtZmFtaWx5PSJIZWx2ZXRpY2EgTmV1ZSxzYW5zLXNlcmlmIiBmb250LXNpemU9IjE0IiBsZXR0ZXItc3BhY2luZz0iMS41Ij5CQkMgUkFESU8gMzwvdGV4dD48dGV4dCB4PSI1MCUiIHk9IjU4JSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwuNykiIGZvbnQtZmFtaWx5PSJIZWx2ZXRpY2EgTmV1ZSxzYW5zLXNlcmlmIiBmb250LXNpemU9IjkiPlVuaXRlZCBLaW5nZG9tPC90ZXh0Pjwvc3ZnPg==",
+    "url_resolved": "",
+    "favicon": "",
+    "country": "United Kingdom",
+    "tags": "classical",
+    "codec": "MP3",
+    "bitrate": 192
+   },
+   {
+    "type": "station",
+    "name": "FIP",
+    "id": "demo-fip",
+    "path": "station/fip",
+    "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMzIwLDQ1JSwzNCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMCw1MCUsMTMlKSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSJ1cmwoI2cpIi8+PHRleHQgeD0iNTAlIiB5PSI0NyUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiNmZmYiIGZvbnQtZmFtaWx5PSJIZWx2ZXRpY2EgTmV1ZSxzYW5zLXNlcmlmIiBmb250LXNpemU9IjE0IiBsZXR0ZXItc3BhY2luZz0iMS41Ij5GSVA8L3RleHQ+PHRleHQgeD0iNTAlIiB5PSI1OCUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsLjcpIiBmb250LWZhbWlseT0iSGVsdmV0aWNhIE5ldWUsc2Fucy1zZXJpZiIgZm9udC1zaXplPSI5Ij5GcmFuY2U8L3RleHQ+PC9zdmc+",
+    "url_resolved": "",
+    "favicon": "",
+    "country": "France",
+    "tags": "eclectic",
+    "codec": "MP3",
+    "bitrate": 192
+   },
+   {
+    "type": "station",
+    "name": "KEXP",
+    "id": "demo-kexp",
+    "path": "station/kexp",
+    "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMjY1LDQ1JSwzNCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMzA1LDUwJSwxMyUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9InVybCgjZykiLz48dGV4dCB4PSI1MCUiIHk9IjQ3JSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2ZmZiIgZm9udC1mYW1pbHk9IkhlbHZldGljYSBOZXVlLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGxldHRlci1zcGFjaW5nPSIxLjUiPktFWFA8L3RleHQ+PHRleHQgeD0iNTAlIiB5PSI1OCUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsLjcpIiBmb250LWZhbWlseT0iSGVsdmV0aWNhIE5ldWUsc2Fucy1zZXJpZiIgZm9udC1zaXplPSI5Ij5Vbml0ZWQgU3RhdGVzPC90ZXh0Pjwvc3ZnPg==",
+    "url_resolved": "",
+    "favicon": "",
+    "country": "United States",
+    "tags": "indie",
+    "codec": "MP3",
+    "bitrate": 192
+   },
+   {
+    "type": "station",
+    "name": "Radio Swiss Jazz",
+    "id": "demo-radio-swiss-jazz",
+    "path": "station/radio-swiss-jazz",
+    "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMTUwLDQ1JSwzNCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMTkwLDUwJSwxMyUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9InVybCgjZykiLz48dGV4dCB4PSI1MCUiIHk9IjQ3JSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2ZmZiIgZm9udC1mYW1pbHk9IkhlbHZldGljYSBOZXVlLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGxldHRlci1zcGFjaW5nPSIxLjUiPlJBRElPIFNXSVNTIDwvdGV4dD48dGV4dCB4PSI1MCUiIHk9IjU4JSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwuNykiIGZvbnQtZmFtaWx5PSJIZWx2ZXRpY2EgTmV1ZSxzYW5zLXNlcmlmIiBmb250LXNpemU9IjkiPlN3aXR6ZXJsYW5kPC90ZXh0Pjwvc3ZnPg==",
+    "url_resolved": "",
+    "favicon": "",
+    "country": "Switzerland",
+    "tags": "jazz",
+    "codec": "MP3",
+    "bitrate": 192
+   },
+   {
+    "type": "station",
+    "name": "NRK Klassisk",
+    "id": "demo-nrk-klassisk",
+    "path": "station/nrk-klassisk",
+    "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMjAwLDQ1JSwzNCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMjQwLDUwJSwxMyUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9InVybCgjZykiLz48dGV4dCB4PSI1MCUiIHk9IjQ3JSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2ZmZiIgZm9udC1mYW1pbHk9IkhlbHZldGljYSBOZXVlLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGxldHRlci1zcGFjaW5nPSIxLjUiPk5SSyBLTEFTU0lTSzwvdGV4dD48dGV4dCB4PSI1MCUiIHk9IjU4JSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwuNykiIGZvbnQtZmFtaWx5PSJIZWx2ZXRpY2EgTmV1ZSxzYW5zLXNlcmlmIiBmb250LXNpemU9IjkiPk5vcndheTwvdGV4dD48L3N2Zz4=",
+    "url_resolved": "",
+    "favicon": "",
+    "country": "Norway",
+    "tags": "classical",
+    "codec": "MP3",
+    "bitrate": 192
+   }
+  ]
+ },
+ "favourites": {
+  "path": "favourites",
+  "parent": "",
+  "name": "Favourites",
+  "items": [
+   {
+    "type": "station",
+    "name": "Jazz24",
+    "id": "demo-jazz24",
+    "path": "station/jazz24",
+    "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMjEwLDQ1JSwzNCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMjUwLDUwJSwxMyUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9InVybCgjZykiLz48dGV4dCB4PSI1MCUiIHk9IjQ3JSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2ZmZiIgZm9udC1mYW1pbHk9IkhlbHZldGljYSBOZXVlLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGxldHRlci1zcGFjaW5nPSIxLjUiPkpBWloyNDwvdGV4dD48dGV4dCB4PSI1MCUiIHk9IjU4JSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwuNykiIGZvbnQtZmFtaWx5PSJIZWx2ZXRpY2EgTmV1ZSxzYW5zLXNlcmlmIiBmb250LXNpemU9IjkiPlVuaXRlZCBTdGF0ZXM8L3RleHQ+PC9zdmc+",
+    "url_resolved": "",
+    "favicon": "",
+    "country": "United States",
+    "tags": "jazz",
+    "codec": "MP3",
+    "bitrate": 192
+   },
+   {
+    "type": "station",
+    "name": "Radio Swiss Classic",
+    "id": "demo-radio-swiss-classic",
+    "path": "station/radio-swiss-classic",
+    "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMTUwLDQ1JSwzNCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMTkwLDUwJSwxMyUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9InVybCgjZykiLz48dGV4dCB4PSI1MCUiIHk9IjQ3JSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2ZmZiIgZm9udC1mYW1pbHk9IkhlbHZldGljYSBOZXVlLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGxldHRlci1zcGFjaW5nPSIxLjUiPlJBRElPIFNXSVNTIDwvdGV4dD48dGV4dCB4PSI1MCUiIHk9IjU4JSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwuNykiIGZvbnQtZmFtaWx5PSJIZWx2ZXRpY2EgTmV1ZSxzYW5zLXNlcmlmIiBmb250LXNpemU9IjkiPlN3aXR6ZXJsYW5kPC90ZXh0Pjwvc3ZnPg==",
+    "url_resolved": "",
+    "favicon": "",
+    "country": "Switzerland",
+    "tags": "classical",
+    "codec": "MP3",
+    "bitrate": 192
+   },
+   {
+    "type": "station",
+    "name": "NTS 1",
+    "id": "demo-nts-1",
+    "path": "station/nts-1",
+    "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woOTAsNDUlLDM0JSkiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9ImhzbCgxMzAsNTAlLDEzJSkiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0idXJsKCNnKSIvPjx0ZXh0IHg9IjUwJSIgeT0iNDclIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIiBmb250LWZhbWlseT0iSGVsdmV0aWNhIE5ldWUsc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgbGV0dGVyLXNwYWNpbmc9IjEuNSI+TlRTIDE8L3RleHQ+PHRleHQgeD0iNTAlIiB5PSI1OCUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsLjcpIiBmb250LWZhbWlseT0iSGVsdmV0aWNhIE5ldWUsc2Fucy1zZXJpZiIgZm9udC1zaXplPSI5Ij5Vbml0ZWQgS2luZ2RvbTwvdGV4dD48L3N2Zz4=",
+    "url_resolved": "",
+    "favicon": "",
+    "country": "United Kingdom",
+    "tags": "electronic",
+    "codec": "MP3",
+    "bitrate": 192
+   }
+  ]
+ },
+ "genres": {
+  "path": "genres",
+  "parent": "",
+  "name": "Genres",
+  "items": [
+   {
+    "type": "category",
+    "name": "Classical",
+    "id": "classical",
+    "path": "genres/classical",
+    "icon": "music-note",
+    "color": "#74B9FF"
+   },
+   {
+    "type": "category",
+    "name": "Jazz",
+    "id": "jazz",
+    "path": "genres/jazz",
+    "icon": "music-note",
+    "color": "#F9CA24"
+   },
+   {
+    "type": "category",
+    "name": "Ambient",
+    "id": "ambient",
+    "path": "genres/ambient",
+    "icon": "music-note",
+    "color": "#A29BFE"
+   }
+  ]
+ }
+}

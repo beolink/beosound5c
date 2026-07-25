@@ -2,7 +2,7 @@
 
 A modern recreation of the Bang & Olufsen BeoSound 5 experience using web technologies and a Raspberry Pi 5.
 
-**Website: [www.beosound5c.com](https://www.beosound5c.com)**
+**Website: [beosound5c.com](https://beosound5c.com)**
 
 This project replaces the original BeoSound 5 software with a circular arc-based touch UI that integrates with Sonos, Bluesound, and Denon HEOS players, music services (Spotify, Apple Music, TIDAL, Plex), and Home Assistant. It works with the original BS5 hardware (rotary encoder, laser pointer, display) and supports BeoRemote One for wireless control.
 
@@ -35,7 +35,7 @@ Updates service files, sudoers, and Python packages. No reboot needed unless sys
 
 ## Remote Support
 
-If you need help troubleshooting, you can open a temporary remote support session. The installer pre-installs [Tailscale](https://tailscale.com/) (disabled by default — no background services run until you start a session).
+If you need help troubleshooting, you can open a temporary remote support session. Nothing is installed for this up front: the first time you run `bs5c-support`, it asks before fetching [Tailscale](https://tailscale.com/), and no daemon runs until you complete a session with an access key.
 
 ```bash
 bs5c-support          # Start session — prompts for an access key
@@ -58,15 +58,35 @@ For the full list of fields and options, see the **[config schema](docs/config.s
 
 To edit scenes (names, icons, HA scripts), edit `/etc/beosound5c/config.json` directly — the `"scenes"` array.
 
+## Security model
+
+A BeoSound 5c expects to live on a home network you trust, like the speakers it
+talks to. Worth knowing before you install one:
+
+- **The local HTTP API has no authentication.** Anything on your LAN can read
+  device status and drive playback (`/router/*`, `/player/*`, the source
+  services on ports 8766–8779). That's deliberate — it's how the kiosk, the
+  phone setup page and Home Assistant all talk to it.
+- **Config changes and updates reject cross-site browsers.** `POST /config` and
+  `POST /update/run` accept requests from the device's own setup page, Home
+  Assistant or `curl`, but refuse any web page served from somewhere else — so
+  a site you happen to visit can't reconfigure your device or trigger an
+  update behind your back.
+- **Secrets stay out of the API.** `/etc/beosound5c/secrets.env` is `0600` and
+  owned by the service user; the setup UI can write credentials but never reads
+  them back.
+- **Don't port-forward it.** None of these ports belong on the public internet.
+  For access from outside, use a VPN or `bs5c-support` (below).
+
 ## Telemetry
 
 Honestly, I just find it delightful to see where BeoSound 5cs are showing up in the world. There are already installations in the US, across Europe, here in Stockholm, in Asia, and in Australia — and every time a new one appears on the map it makes my day.
 
-To make that possible, each BS5c sends a small anonymous ping to `beosound5c.com` on startup. There's a toggle for it in the web config UI — turning it off is completely fine and changes nothing else. Your public IP is used to infer a country (via Cloudflare — never stored beyond the country name). No hostname, device name, MAC address, or credentials are ever sent. Feel free to read exactly what gets posted in [`services/lib/beacon.py`](services/lib/beacon.py).
+To make that possible, each BS5c sends a small anonymous ping to `beosound5c.com` on startup. There's a toggle for it in the web config UI — turning it off is completely fine and changes nothing else. **Nothing is sent before you've seen that toggle**: the first ping waits until you save the setup screen, so a device you install and never configure never phones home. Your public IP is used to infer a country (via Cloudflare — never stored beyond the country name). Nothing that identifies you or your hardware is sent: no hostname, no device name, no MAC address, no account names, no credentials, and nothing about what you listen to. Feel free to read exactly what gets posted in [`services/lib/beacon.py`](services/lib/beacon.py).
 
 | Field | Value |
 |---|---|
-| `device_id` | Stable anonymous ID — a one-way UUIDv5 hash of the Pi's onboard MAC address (the MAC itself is never sent). Derived from the MAC so a re-imaged device keeps the same identity instead of counting twice; falls back to a random UUID if no onboard interface exists |
+| `device_id` | A random ID the device makes up for itself on first ping and keeps in a `device_id` file. It isn't derived from your MAC address or any other hardware identifier, so it says nothing about your machine — it exists only so two pings can be recognised as the same dot on the map. Re-image the SD card and you simply get a new one |
 | `version` | Software version string |
 | `sources` | Names of enabled sources (e.g. `spotify`, `cd`) — no credentials or config values |
 | `player_type` | Player backend: `sonos`, `bluesound`, `heos`, or `local` |

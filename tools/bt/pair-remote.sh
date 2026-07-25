@@ -111,7 +111,7 @@ while true; do
 
     bluetoothctl pair "$FOUND_MAC" &>/dev/null &
 
-    for i in {1..10}; do
+    for _ in {1..10}; do
         echo -n "."
         sleep 1
     done
@@ -122,7 +122,7 @@ while true; do
 
         echo -n "  Trusting device "
         bluetoothctl trust "$FOUND_MAC" &>/dev/null
-        for i in {1..3}; do
+        for _ in {1..3}; do
             echo -n "."
             sleep 1
         done
@@ -131,7 +131,7 @@ while true; do
 
         echo -n "  Connecting "
         bluetoothctl connect "$FOUND_MAC" &>/dev/null &
-        for i in {1..5}; do
+        for _ in {1..5}; do
             echo -n "."
             sleep 1
         done

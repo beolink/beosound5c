@@ -2,6 +2,8 @@
 import asyncio, threading, json, time, sys
 import hid, websockets
 import subprocess
+import tempfile
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 import os
 import logging
@@ -565,9 +567,13 @@ async def handle_update_check(request):
 async def handle_update_run(request):
     """POST /update/run — start background update, return 202 immediately."""
     global _update_in_progress
+    if not request_origin_ok(request):
+        return _forbidden_cross_origin(request, 'POST /update/run')
+
+    cors = _cors_headers(request)
     if request.method == 'OPTIONS':
         return web.Response(headers={
-            'Access-Control-Allow-Origin': '*',
+            **cors,
             'Access-Control-Allow-Methods': 'POST, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type',
         })
@@ -576,7 +582,7 @@ async def handle_update_run(request):
         return web.json_response(
             {'status': 'already_in_progress'},
             status=409,
-            headers={'Access-Control-Allow-Origin': '*'},
+            headers=cors,
         )
 
     release = await _fetch_latest_release()
@@ -584,14 +590,14 @@ async def handle_update_run(request):
         return web.json_response(
             {'status': 'error', 'message': 'Cannot reach GitHub'},
             status=503,
-            headers={'Access-Control-Allow-Origin': '*'},
+            headers=cors,
         )
 
     current = _get_current_version()
     if not _is_newer(release['latest'], current):
         return web.json_response(
             {'status': 'up_to_date'},
-            headers={'Access-Control-Allow-Origin': '*'},
+            headers=cors,
         )
 
     _update_in_progress = True
@@ -600,7 +606,95 @@ async def handle_update_run(request):
     return web.json_response(
         {'status': 'started', 'latest': release['latest']},
         status=202,
-        headers={'Access-Control-Allow-Origin': '*'},
+        headers=cors,
+    )
+
+
+def _local_host_names() -> set:
+    """Names and addresses by which this device legitimately answers.
+
+    Used to tell "the setup page on this device" apart from "some other web
+    page in the owner's browser" — see :func:`request_origin_ok`.
+    """
+    names = {'localhost', '127.0.0.1', '::1', '[::1]'}
+    try:
+        hostname = subprocess.run(['hostname'], capture_output=True, text=True,
+                                  timeout=2).stdout.strip()
+        if hostname:
+            names.add(hostname.lower())
+            names.add(f'{hostname.lower()}.local')
+    except Exception:
+        pass
+    try:
+        ips = subprocess.run(['hostname', '-I'], capture_output=True, text=True,
+                             timeout=2).stdout.split()
+        names.update(ip.lower() for ip in ips)
+    except Exception:
+        pass
+    return names
+
+
+def request_origin_ok(request) -> bool:
+    """False when a request comes from a web page on some other site.
+
+    These endpoints have no authentication — a trusted LAN is the security
+    model (see the README).  That is a different thing from being reachable
+    by *any* site the owner happens to visit, though: browsers will happily
+    let evil.example.com POST to a private address, so without this check,
+    loading a page while on the same network is enough to rewrite a device's
+    config or kick off an update.
+
+    Legitimate callers are the setup UI (served by beo-http on port 80, which
+    proxies here and forwards the browser's Origin and Host), Home Assistant
+    and curl (no Origin header at all), and the local kiosk.  Anything whose
+    Origin names a host this device does not answer to is rejected.
+    """
+    origin = request.headers.get('Origin', '').strip()
+    if not origin:
+        return True                      # not a browser page: HA, curl, kiosk
+    if origin.lower() == 'null':
+        return False                     # sandboxed iframe / file:// document
+
+    try:
+        origin_host = (urllib.parse.urlsplit(origin).hostname or '').lower()
+    except ValueError:
+        return False
+    if not origin_host:
+        return False
+
+    # The host the client used to reach us (forwarded by the port-80 proxy).
+    # If the page came from that same host, it is our own UI.
+    forwarded = (request.headers.get('X-Forwarded-Host')
+                 or request.headers.get('Host') or '')
+    forwarded_host = forwarded.rsplit(':', 1)[0].strip('[]').lower() if forwarded else ''
+    if forwarded_host and origin_host == forwarded_host:
+        return True
+
+    return origin_host in _local_host_names()
+
+
+def _cors_headers(request) -> dict:
+    """CORS headers for endpoints that change state.
+
+    No wildcard: echo the caller's Origin only once it has passed
+    :func:`request_origin_ok`, so a rejected site cannot read the response.
+    """
+    origin = request.headers.get('Origin', '').strip()
+    if origin and request_origin_ok(request):
+        return {'Access-Control-Allow-Origin': origin, 'Vary': 'Origin'}
+    return {'Vary': 'Origin'}
+
+
+def _forbidden_cross_origin(request, endpoint: str):
+    """403 for a cross-site browser request to a mutating endpoint."""
+    logger.warning('Rejected cross-origin %s from Origin=%r (host=%r)',
+                   endpoint, request.headers.get('Origin'),
+                   request.headers.get('X-Forwarded-Host') or request.headers.get('Host'))
+    return web.json_response(
+        {'status': 'error',
+         'message': 'Cross-origin request rejected — open the setup page on the device itself'},
+        status=403,
+        headers={'Vary': 'Origin'},
     )
 
 
@@ -788,25 +882,14 @@ async def handle_discover_heos(request):
         return web.json_response([], headers={'Access-Control-Allow-Origin': '*'})
 
 
-async def _write_secrets(updates: dict) -> None:
-    """Update specific env vars in /etc/beosound5c/secrets.env, preserving others."""
-    secrets_path = '/etc/beosound5c/secrets.env'
-    # Read current content via sudo
-    try:
-        read_proc = await asyncio.create_subprocess_exec(
-            'sudo', 'cat', secrets_path,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        stdout, _ = await asyncio.wait_for(read_proc.communicate(), timeout=5)
-        lines = stdout.decode(errors='replace').splitlines(keepends=True)
-    except Exception:
-        lines = []
+SECRETS_PATH = '/etc/beosound5c/secrets.env'
 
-    # Replace matching lines, append any new ones
+
+def _render_secrets(existing: str, updates: dict) -> str:
+    """Return secrets.env content with `updates` applied, other lines kept."""
     new_lines = []
     seen: set = set()
-    for line in lines:
+    for line in existing.splitlines(keepends=True):
         key = line.split('=', 1)[0].strip() if '=' in line else None
         if key and key in updates:
             val = updates[key].replace('\\', '\\\\').replace('"', '\\"')
@@ -818,30 +901,65 @@ async def _write_secrets(updates: dict) -> None:
         if key not in seen:
             val_esc = val.replace('\\', '\\\\').replace('"', '\\"')
             new_lines.append(f'{key}="{val_esc}"\n')
+    return ''.join(new_lines)
 
-    content = ''.join(new_lines)
+
+def _write_secrets_sync(updates: dict) -> None:
+    """Apply `updates` to secrets.env. Raises OSError if it can't.
+
+    The file is owned by the service user and 0600 (the installer sets that up,
+    post-update.sh migrates older root-owned files), so this writes it directly.
+    It used to go through `sudo cat` / `sudo tee`, which only worked because
+    Raspberry Pi OS Imager grants the first user blanket NOPASSWD sudo — on any
+    install without that file, credentials entered in the setup UI were dropped
+    with nothing but a log line.  Writing as the owner needs no sudo at all.
+
+    Atomic: a new file is written alongside and renamed over the old one, so a
+    power cut mid-save can't leave the device with half a token.
+    """
     try:
-        write_proc = await asyncio.create_subprocess_exec(
-            'sudo', 'tee', secrets_path,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        _, stderr = await asyncio.wait_for(write_proc.communicate(content.encode()), timeout=10)
-        if write_proc.returncode != 0:
-            msg = stderr.decode().strip() if stderr else 'tee failed'
-            logger.error('Secrets write failed: %s', msg)
-    except asyncio.TimeoutError:
-        logger.error('Timeout writing secrets.env')
+        with open(SECRETS_PATH) as f:
+            existing = f.read()
+    except FileNotFoundError:
+        existing = ''
+
+    content = _render_secrets(existing, updates)
+
+    directory = os.path.dirname(SECRETS_PATH) or '.'
+    fd, tmp_path = tempfile.mkstemp(dir=directory, prefix='.secrets.env.')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            f.write(content)
+        os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, SECRETS_PATH)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+async def _write_secrets(updates: dict) -> bool:
+    """Write secrets.env off the event loop. Returns True on success."""
+    try:
+        await asyncio.get_running_loop().run_in_executor(
+            None, _write_secrets_sync, updates)
+        return True
     except Exception as e:
-        logger.error('Secrets write error: %s', e)
+        logger.error('Secrets write failed (%s): %s', SECRETS_PATH, e)
+        return False
 
 
 async def handle_config_save(request):
     """POST /config — write a new config.json and restart all beo-* services."""
+    if not request_origin_ok(request):
+        return _forbidden_cross_origin(request, 'POST /config')
+
+    cors = _cors_headers(request)
     if request.method == 'OPTIONS':
         return web.Response(headers={
-            'Access-Control-Allow-Origin': '*',
+            **cors,
             'Access-Control-Allow-Methods': 'POST, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type',
         })
@@ -852,14 +970,14 @@ async def handle_config_save(request):
         return web.json_response(
             {'status': 'error', 'message': 'Invalid JSON'},
             status=400,
-            headers={'Access-Control-Allow-Origin': '*'},
+            headers=cors,
         )
 
     if not isinstance(body, dict) or not body.get('device'):
         return web.json_response(
             {'status': 'error', 'message': 'Config must be a JSON object with a "device" field'},
             status=400,
-            headers={'Access-Control-Allow-Origin': '*'},
+            headers=cors,
         )
 
     # Saving via the web UI implies setup is done — flip the first-boot flag so
@@ -930,18 +1048,28 @@ async def handle_config_save(request):
             return web.json_response(
                 {'status': 'error', 'message': msg},
                 status=500,
-                headers={'Access-Control-Allow-Origin': '*'},
+                headers=cors,
             )
     except asyncio.TimeoutError:
         return web.json_response(
             {'status': 'error', 'message': 'Timeout writing config'},
             status=500,
-            headers={'Access-Control-Allow-Origin': '*'},
+            headers=cors,
         )
 
+    # Credentials go to secrets.env. If that write fails the config is already
+    # saved, so don't fail the whole request — but say so, or the owner is left
+    # believing a token was stored when it wasn't.
+    secrets_warning = None
     if secrets_to_write:
-        await _write_secrets(secrets_to_write)
-        logger.info('Secrets updated: %s', ', '.join(secrets_to_write.keys()))
+        if await _write_secrets(secrets_to_write):
+            logger.info('Secrets updated: %s', ', '.join(secrets_to_write.keys()))
+        else:
+            secrets_warning = (
+                f'Settings saved, but credentials could not be written to '
+                f'{SECRETS_PATH}. Check its owner and permissions '
+                f'(should be the beosound5c user, mode 600).'
+            )
 
     logger.info('Config saved to %s — scheduling reconcile', config_path)
 
@@ -982,9 +1110,15 @@ async def handle_config_save(request):
 
     _background_tasks.spawn(_reconcile(), name='config_reconcile')
 
+    if secrets_warning:
+        return web.json_response(
+            {'status': 'warning', 'message': secrets_warning},
+            headers=cors,
+        )
+
     return web.json_response(
         {'status': 'ok', 'message': 'Config saved, services restarting'},
-        headers={'Access-Control-Allow-Origin': '*'},
+        headers=cors,
     )
 
 
@@ -1230,8 +1364,14 @@ async def handle_camera_stream(request):
     ha_url = cfg("home_assistant", "url", default="http://homeassistant.local:8123")
     ha_token = os.getenv('HA_TOKEN', '')
 
-    # Get camera entity from query params, default to doorbell
-    entity = request.query.get('entity', 'camera.front_door')
+    # The caller names the camera. There is no sensible default: entity ids
+    # belong to the owner's Home Assistant, and guessing one just produces a
+    # confusing 404 from HA instead of a clear error here.
+    entity = request.query.get('entity', '')
+    if not entity:
+        return web.json_response(
+            {'error': 'missing "entity" parameter'}, status=400,
+            headers={'Access-Control-Allow-Origin': '*'})
 
     response = None
     try:
@@ -1287,7 +1427,11 @@ async def handle_camera_snapshot(request):
     ha_url = cfg("home_assistant", "url", default="http://homeassistant.local:8123")
     ha_token = os.getenv('HA_TOKEN', '')
 
-    entity = request.query.get('entity', 'camera.front_door')
+    entity = request.query.get('entity', '')
+    if not entity:
+        return web.json_response(
+            {'error': 'missing "entity" parameter'}, status=400,
+            headers={'Access-Control-Allow-Origin': '*'})
 
     try:
         session = await get_http_session()
@@ -1414,9 +1558,15 @@ async def process_command(data: dict) -> dict:
 
     elif command == 'show_camera':
         title = params.get('title', 'Camera')
-        camera_entity = params.get('camera_entity', 'camera.front_door')
-        camera_id = params.get('camera_id', 'doorbell')
+        camera_entity = params.get('camera_entity', '')
+        camera_id = params.get('camera_id', 'camera')
         actions = params.get('actions', {})
+
+        if not camera_entity:
+            # The automation has to say which camera; the device has no
+            # opinion about what a home's cameras are called.
+            logger.warning('show_camera without camera_entity — ignoring')
+            return {'status': 'error', 'message': 'camera_entity is required'}
 
         logger.info('Showing camera overlay: %s (%s)', title, camera_entity)
         set_backlight(True)

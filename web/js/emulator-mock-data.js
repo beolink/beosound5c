@@ -6,8 +6,11 @@ const EmulatorMockData = {
     cameras: {
         'Front door': 'images/demo/door-camera.jpg',
         'Door': 'images/demo/door-camera.jpg',
-        'Gate': 'images/demo/gate-camera.jpg',
-        'default': 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=640&h=480&fit=crop'
+        'Gate': 'images/demo/cam-entrance.jpg',
+        'Garden': 'images/demo/cam-garden.jpg',
+        // Bundled, not hotlinked: a demo shouldn't break when someone else's
+        // image host changes a URL.
+        'default': 'images/demo/cam-entrance.jpg'
     },
 
     // === Apple TV / Showing view data ===

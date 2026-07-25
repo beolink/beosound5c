@@ -39,24 +39,39 @@ def _proxy_to_input(handler, method: str) -> bool:
     # otherwise a slow-but-successful scan surfaces to the UI as a 502.
     timeout = 30 if handler.path.startswith('/discover/') else 15
 
+    # Pass the browser's Origin and the host it dialled through to beo-input.
+    # Its mutating endpoints (POST /config, /update/run) reject cross-site
+    # requests — dropping these headers here would turn this proxy into the
+    # bypass (see request_origin_ok() in services/input.py).
+    fwd_headers = {'Content-Type': ct}
+    origin = handler.headers.get('Origin')
+    if origin:
+        fwd_headers['Origin'] = origin
+    if handler.headers.get('Host'):
+        fwd_headers['X-Forwarded-Host'] = handler.headers['Host']
+
+    def _relay(status, payload, content_type, upstream_headers=None):
+        handler.send_response(status)
+        handler.send_header('Content-Type', content_type)
+        # Mirror upstream's CORS decision instead of forcing a wildcard.
+        acao = (upstream_headers or {}).get('Access-Control-Allow-Origin')
+        if acao:
+            handler.send_header('Access-Control-Allow-Origin', acao)
+        elif not origin:
+            handler.send_header('Access-Control-Allow-Origin', '*')
+        handler.send_header('Vary', 'Origin')
+        handler.end_headers()
+        handler.wfile.write(payload)
+
     try:
         req = urllib.request.Request(url, data=body, method=method,
-                                     headers={'Content-Type': ct})
+                                     headers=fwd_headers)
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = resp.read()
-            handler.send_response(resp.status)
-            handler.send_header('Content-Type',
-                                 resp.headers.get('Content-Type', 'application/json'))
-            handler.send_header('Access-Control-Allow-Origin', '*')
-            handler.end_headers()
-            handler.wfile.write(data)
+            _relay(resp.status, resp.read(),
+                   resp.headers.get('Content-Type', 'application/json'),
+                   resp.headers)
     except urllib.error.HTTPError as e:
-        data = e.read()
-        handler.send_response(e.code)
-        handler.send_header('Content-Type', 'application/json')
-        handler.send_header('Access-Control-Allow-Origin', '*')
-        handler.end_headers()
-        handler.wfile.write(data)
+        _relay(e.code, e.read(), 'application/json', e.headers)
     except Exception as e:
         handler.send_response(502)
         handler.send_header('Content-Type', 'text/plain')
@@ -72,6 +87,11 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_OPTIONS(self):
+        # Proxied paths answer their own preflight — beo-input refuses
+        # cross-site origins there, and answering for it here would hand a
+        # foreign page permission it should not get.
+        if _proxy_to_input(self, 'OPTIONS'):
+            return
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')

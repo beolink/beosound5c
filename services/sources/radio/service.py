@@ -199,6 +199,7 @@ class RadioService(SourceBase):
         self._api_session: ClientSession | None = None
         self._playing_state = "stopped"  # "playing", "paused", "stopped"
         self._current_station: dict | None = None
+        self._state_poll_task: asyncio.Task | None = None  # player-truth watchdog
         # Sveriges Radio now-playing
         self._sr_now_playing: dict[str, dict] = {}  # uuid → {program, title, image}
         self._sr_channel_images: dict[str, bytes] = {}  # uuid → PNG bytes
@@ -580,21 +581,29 @@ class RadioService(SourceBase):
 
         elif cmd == "toggle":
             if self._playing_state == "playing":
-                await self.player_pause()
-                self._playing_state = "paused"
-                await self.register("paused")
-                if self._current_station:
-                    await self.post_media_update(
-                        **self._build_meta(self._current_station), state="paused"
-                    )
+                if await self.player_pause():
+                    self._playing_state = "paused"
+                    await self.register("paused")
+                    if self._current_station:
+                        await self.post_media_update(
+                            **self._build_meta(self._current_station), state="paused"
+                        )
+                else:
+                    # Audio keeps playing — don't claim 'paused' in the UI
+                    log.warning("Pause failed — stream may not be pausable")
             elif self._playing_state == "paused":
-                await self.player_resume()
-                self._playing_state = "playing"
-                await self.register("playing")
-                if self._current_station:
-                    await self.post_media_update(
-                        **self._build_meta(self._current_station), state="playing"
-                    )
+                if await self.player_resume():
+                    self._playing_state = "playing"
+                    self._start_state_poll()
+                    await self.register("playing")
+                    if self._current_station:
+                        await self.post_media_update(
+                            **self._build_meta(self._current_station), state="playing"
+                        )
+                elif self._current_station:
+                    # Resume failed (stale stream buffer?) — restart the station
+                    log.info("Resume failed — restarting station")
+                    await self._play_station(self._current_station)
             elif self._current_station:
                 await self._play_station(self._current_station)
 
@@ -741,6 +750,15 @@ class RadioService(SourceBase):
         return {"status": "ok"}
 
     async def handle_resync(self) -> dict:
+        # Verify our belief against the player before re-asserting it — a
+        # resync must not resurrect a stale 'playing' state
+        if self._playing_state == "playing":
+            actual = await self.player_state()
+            if actual == "stopped":
+                log.info("Resync: player is stopped — correcting stale 'playing'")
+                self._playing_state = "stopped"
+            else:
+                self._start_state_poll()
         state = self._playing_state if self._playing_state in ('playing', 'paused') else 'available'
         await self.register(state)
         await self._resync_media()
@@ -882,6 +900,10 @@ class RadioService(SourceBase):
         if not action_ts:
             action_ts = self._action_ts
 
+        # Snapshot previous belief so a failed play can be reverted
+        prev_station = self._current_station
+        prev_state = self._playing_state
+
         self._current_station = station
         self._save_last_station()
         # Snapshot browse list for next/prev cycling (only when playing from browse)
@@ -897,7 +919,7 @@ class RadioService(SourceBase):
 
         meta = self._build_meta(station)
 
-        # Pre-broadcast metadata
+        # Pre-broadcast metadata (optimistic — reverted below if the play fails)
         await self.register("playing", auto_power=True)
         await self.post_media_update(**meta, state="playing", reason="track_change")
 
@@ -914,12 +936,62 @@ class RadioService(SourceBase):
         )
         if ok:
             self._playing_state = "playing"
+            self._start_state_poll()
         else:
             # Roll back the pre-broadcast — otherwise GO toggles
             # pause/resume on a stream that never started.
-            log.error("Player failed to start station %s", station.get("name"))
-            self._playing_state = "stopped"
-            await self.register("available")
+            log.error("Player failed to start station '%s' — reverting",
+                      station.get("name", "?"))
+            if prev_state == "playing" and await self.reassert_player_media():
+                # The previous station keeps playing — restore belief
+                self._current_station = prev_station
+                self._save_last_station()
+                self._playing_state = "playing"
+            else:
+                self._playing_state = "stopped"
+                await self.register("available")
+
+    def _start_state_poll(self):
+        if self._state_poll_task and not self._state_poll_task.done():
+            return
+        self._state_poll_task = self._spawn(self._state_poll_loop(),
+                                            name="radio_state_poll")
+
+    async def _state_poll_loop(self):
+        """Watch the player while we believe a station is playing.
+
+        Radio previously had no playback feedback at all: a dead stream URL or
+        an external stop left the UI showing 'playing' forever (and resync
+        would resurrect the wrong state on every reconnect). The player's
+        actual state is the truth — converge to it."""
+        stopped_polls = 0
+        try:
+            while self._playing_state == "playing":
+                await asyncio.sleep(5)
+                if self._playing_state != "playing":
+                    return
+                state = await self.player_state()
+                if state == "stopped":
+                    # Two consecutive observations — don't race an in-flight
+                    # station change or an external-stop router override
+                    stopped_polls += 1
+                    if stopped_polls >= 2:
+                        log.info("Player stopped (stream died or external stop) "
+                                 "— radio no longer playing")
+                        self._playing_state = "stopped"
+                        await self.register("available")
+                        return
+                else:
+                    stopped_polls = 0
+                    if state == "paused" and self._playing_state == "playing":
+                        log.info("Player paused externally — following")
+                        self._playing_state = "paused"
+                        await self.register("paused")
+                        return
+        except asyncio.CancelledError:
+            return
+        except Exception as e:
+            log.warning("Radio state poll error: %s", e)
 
     def _build_meta(self, station: dict) -> dict:
         uuid = station.get("stationuuid", "")

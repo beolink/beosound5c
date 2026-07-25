@@ -121,6 +121,10 @@ class PlexService(DigitPlaylistMixin, SourceBase):
         self._current_index = 0
         self._last_play_time = 0
         self._last_play_id = None
+        self._play_lock = asyncio.Lock()   # serializes track starts (no interleaved skips)
+        self._expected_stream_url = None   # URL the player confirmed it started
+        self._track_started_at = 0.0       # monotonic time of last confirmed start
+        self._pending_stop_polls = 0       # consecutive 'stopped' poll observations
 
     async def on_start(self):
         # auth.load() connects to the Plex server with blocking requests
@@ -377,7 +381,15 @@ class PlexService(DigitPlaylistMixin, SourceBase):
         await self._play_current_track()
 
     async def _play_current_track(self):
-        """Play the track at _current_index in _current_playlist."""
+        """Play the track at _current_index in _current_playlist.
+
+        Serialized by _play_lock so rapid skips can't interleave (the slow
+        artwork fetch made out-of-order metadata posts possible), and the
+        optimistic pre-broadcast is reverted if the player refuses the track."""
+        async with self._play_lock:
+            await self._play_current_locked()
+
+    async def _play_current_locked(self):
         if not self._current_playlist:
             return
 
@@ -396,14 +408,16 @@ class PlexService(DigitPlaylistMixin, SourceBase):
             # Try next track
             if self._current_index + 1 < len(tracks):
                 self._current_index += 1
-                await self._play_current_track()
+                await self._play_current_locked()
             return
 
         # Fetch artwork and embed as base64 (Plex servers may use self-signed
         # HTTPS certs that the browser would reject for direct image loads)
         artwork = await self._fetch_artwork_base64(track.get("image", ""))
 
-        # Pre-broadcast metadata for instant PLAYING view update
+        prev_np = self.now_playing
+        # Pre-broadcast metadata for instant PLAYING view update (optimistic —
+        # reverted below if the play command fails)
         await self.post_media_update(
             title=track.get("name", ""),
             artist=track.get("artist", ""),
@@ -425,14 +439,31 @@ class PlexService(DigitPlaylistMixin, SourceBase):
                 'total': len(tracks),
                 'index': self._current_index,
             }
+            self._expected_stream_url = url
+            self._track_started_at = time.monotonic()
+            self._pending_stop_polls = 0
             await self.register("playing", auto_power=True)
             self._start_polling()
         else:
-            # Leave state != "playing" — if it stayed "playing" the poll
-            # loop would see the stopped player and auto-advance, burning
-            # through the entire playlist at poll rate (e.g. when every
-            # cached stream URL 401s after a token rotation).
-            log.error("Player service failed to start track — stopping")
+            log.error("Player failed to start '%s' — reverting optimistic state",
+                      track.get('name', '?'))
+            await self._revert_failed_play(prev_np)
+
+    async def _revert_failed_play(self, prev_np):
+        """A play command failed — the player still plays whatever it played
+        before (or nothing). Converge belief and UI back to that reality."""
+        if prev_np is not None and await self.reassert_player_media():
+            # Previous track still playing — restore belief incl. queue index
+            self.now_playing = prev_np
+            idx = prev_np.get('index')
+            if idx is not None and self._current_index != idx:
+                self._current_index = idx
+                self._save_last_played()
+        else:
+            # Leave state != "playing" and stop polling — a stopped player
+            # with state "playing" would auto-advance and burn through the
+            # entire playlist at poll rate (e.g. when every cached stream
+            # URL 401s after a token rotation).
             self.state = "stopped"
             self.now_playing = None
             self._stop_polling()
@@ -472,8 +503,14 @@ class PlexService(DigitPlaylistMixin, SourceBase):
             self.state = "playing"
             self._current_playlist = None
             self._current_index = 0
+            self._expected_stream_url = url
+            self._track_started_at = time.monotonic()
+            self._pending_stop_polls = 0
             await self.register("playing", auto_power=True)
             self._start_polling()
+        else:
+            log.error("Player failed to start track URL")
+            await self._revert_failed_play(self.now_playing)
 
     async def get_queue(self, start=0, max_items=50) -> dict:
         """Return the current Plex playlist as a queue."""
@@ -556,6 +593,8 @@ class PlexService(DigitPlaylistMixin, SourceBase):
         self.now_playing = None
         self._current_playlist = None
         self._current_index = 0
+        self._expected_stream_url = None
+        self._pending_stop_polls = 0
         self._stop_polling()
         await self.register("available")
 
@@ -696,21 +735,30 @@ class PlexService(DigitPlaylistMixin, SourceBase):
         """Poll player state. Auto-advance to next track when current finishes."""
         try:
             state = await self.player_state()
-            if state == "playing" and self.state != "playing":
-                self.state = "playing"
-                await self.register("playing")
-            elif state == "stopped" and self.state == "playing":
-                # Track finished — auto-advance if we have a playlist
-                if self._current_playlist:
-                    tracks = self._current_playlist.get('tracks', [])
-                    if self._current_index + 1 < len(tracks):
-                        log.info("Track finished, advancing to next")
-                        self._current_index += 1
-                        self._save_last_played()
-                        await self._play_current_track()
+            if state == "playing":
+                self._pending_stop_polls = 0
+                # Identity check: is the player still playing OUR stream?
+                # Grace period after each start (player may briefly report the
+                # previous URI), and substring match (players may wrap the URL
+                # in a scheme prefix). Empty URI = player can't say — skip.
+                if (self._expected_stream_url and self.state == "playing"
+                        and time.monotonic() - self._track_started_at > 10):
+                    uri = await self.player_track_uri()
+                    if uri and (self._expected_stream_url not in uri
+                                and uri not in self._expected_stream_url):
+                        log.info("Player is playing other content — deactivating "
+                                 "(uri=%.60s)", uri)
+                        self.state = "stopped"
+                        self.now_playing = None
+                        await self.register("available")
                         return
-                    else:
-                        log.info("Playlist finished")
+                if self.state != "playing":
+                    self.state = "playing"
+                    await self.register("playing")
+            elif state == "stopped" and self.state == "playing":
+                if self._current_playlist:
+                    await self._handle_playback_stopped()
+                    return
                 self.state = "stopped"
                 self.now_playing = None
                 await self.register("available")
@@ -719,6 +767,42 @@ class PlexService(DigitPlaylistMixin, SourceBase):
                 await self.register("paused")
         except Exception as e:
             log.warning("Player state poll error: %s", e)
+
+    async def _handle_playback_stopped(self):
+        """Playing → stopped with a playlist loaded. Distinguish 'track
+        finished' (advance) from 'stream died' / 'stopped externally'
+        (deactivate) instead of blindly advancing."""
+        # Debounce: require two consecutive stopped polls. An external stop
+        # fires a router playback-override that deactivates this source within
+        # ~1s — advancing on the first poll would resurrect playback the user
+        # just stopped.
+        self._pending_stop_polls += 1
+        if self._pending_stop_polls < 2:
+            return
+        self._pending_stop_polls = 0
+
+        played = time.monotonic() - self._track_started_at
+        if played < 10:
+            # Died almost immediately — dead stream URL, not a finished track.
+            # Advancing would cascade through the whole playlist.
+            log.warning("Track stopped after %.1fs — failed stream, not advancing",
+                        played)
+            self.state = "stopped"
+            self.now_playing = None
+            await self.register("available")
+            return
+
+        tracks = self._current_playlist.get('tracks', [])
+        if self._current_index + 1 < len(tracks):
+            log.info("Track finished, advancing to next")
+            self._current_index += 1
+            self._save_last_played()
+            await self._play_current_track()
+        else:
+            log.info("Playlist finished")
+            self.state = "stopped"
+            self.now_playing = None
+            await self.register("available")
 
     # -- Extra routes --
 

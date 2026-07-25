@@ -125,3 +125,34 @@ tmp_pressure() {
     logger -t beo-health "/tmp now at ${used}% after cache cleanup"
 }
 tmp_pressure
+
+# Flight-recorder metrics — one compact line per run so the journal holds
+# the resource trajectory leading up to a lockup (Kitchen: unreachable
+# after 1-3 weeks, power-cycle only; suspects are Chromium memory growth
+# on a swapless 4GB system and the rtl8821au USB WiFi driver).  With
+# persistent journald (tools/flight-recorder.sh) the trajectory survives
+# the power cycle.  ~120 bytes / 5 min ≈ 35 KB/day.
+flight_metrics() {
+    local mem_avail load1 tmp_used chrom throttled
+    mem_avail=$(awk '/^MemAvailable:/{printf "%d", $2/1024}' /proc/meminfo)
+    load1=$(cut -d' ' -f1 /proc/loadavg)
+    tmp_used=$(df --output=pcent /tmp 2>/dev/null | tail -1 | tr -dc '0-9')
+    # Chromium process count + total RSS (matches chromium + chrome_crashpad)
+    chrom=$(ps -eo rss=,comm= | awk '$2 ~ /^chrom/ {n++; s+=$1} END {printf "%d/%dM", n, s/1024}')
+    # Firmware throttle flags: 0x0 = healthy, bits set = undervoltage/thermal
+    throttled=$(vcgencmd get_throttled 2>/dev/null | cut -d= -f2)
+
+    # Default-route interface health.  A dead carrier or climbing error
+    # counters with beo-ui still alive points at the WiFi driver, not
+    # Chromium — the two suspects separate cleanly here.
+    local iface net="none"
+    iface=$(ip route show default 2>/dev/null | awk '{print $5; exit}')
+    if [ -n "$iface" ]; then
+        net="${iface}:carrier=$(cat /sys/class/net/$iface/carrier 2>/dev/null || echo '?')"
+        net="$net,rxerr=$(cat /sys/class/net/$iface/statistics/rx_errors 2>/dev/null || echo '?')"
+        net="$net,txerr=$(cat /sys/class/net/$iface/statistics/tx_errors 2>/dev/null || echo '?')"
+    fi
+
+    logger -t beo-metrics "mem_avail=${mem_avail}M chromium=${chrom} load=${load1} tmp=${tmp_used}% throttled=${throttled:-n/a} net=${net}"
+}
+flight_metrics

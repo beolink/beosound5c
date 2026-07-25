@@ -20,7 +20,6 @@
 
 HOST="${HOST:-beosound5c.local}"
 ROUTER="http://localhost:8770"
-PLAYER="http://localhost:8766"
 INPUT="http://localhost:8767"
 PASS=0
 FAIL=0
@@ -576,7 +575,7 @@ done
 echo ""
 
 # Determine which tests to run
-TESTS="${@:-1 2 3 4 5 6 7 8 9 10 11 12}"
+TESTS="${*:-1 2 3 4 5 6 7 8 9 10 11 12}"
 
 for t in $TESTS; do
     "test_$(printf '%02d' "$t")"

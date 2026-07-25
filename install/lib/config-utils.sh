@@ -130,8 +130,12 @@ MQTT_PASSWORD=""
 # Generate at: https://login.tailscale.com/admin/settings/keys
 TAILSCALE_AUTH_KEY=""
 SKEL
-        chmod 600 "$SECRETS_FILE"
     fi
+    # Owned by the service user, not root: beo-input writes credentials from
+    # the web setup UI directly (no sudo). systemd reads EnvironmentFile as
+    # root either way, so nothing else needs to change.
+    chown "$INSTALL_USER":"$INSTALL_USER" "$SECRETS_FILE"
+    chmod 600 "$SECRETS_FILE"
 }
 
 # Read a value from secrets.env

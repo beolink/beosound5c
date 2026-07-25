@@ -102,7 +102,7 @@ EOF
     USER_UID=$(id -u "$INSTALL_USER")
     USER_GID=$(id -g "$INSTALL_USER")
     if grep -q "$USER_CACHE" "$FSTAB"; then
-        log_info "~/.cache tmpfs already configured in fstab"
+        log_info "$INSTALL_HOME/.cache tmpfs already configured in fstab"
     else
         echo "tmpfs $USER_CACHE tmpfs defaults,noatime,nosuid,nodev,size=300M,uid=$USER_UID,gid=$USER_GID,mode=0700 0 0" >> "$FSTAB"
         log_success "Added ~/.cache as 300MB tmpfs"
@@ -111,11 +111,11 @@ EOF
     # --- Redirect ~/.fehbg to tmpfs ---
     local FEHBG="$INSTALL_HOME/.fehbg"
     if [ -L "$FEHBG" ]; then
-        log_info "~/.fehbg already symlinked"
+        log_info "$INSTALL_HOME/.fehbg already symlinked"
     else
         rm -f "$FEHBG"
         sudo -u "$INSTALL_USER" ln -s /tmp/.fehbg "$FEHBG"
-        log_success "~/.fehbg redirected to tmpfs"
+        log_success "$INSTALL_HOME/.fehbg redirected to tmpfs"
     fi
 
     # --- Redirect WirePlumber state to tmpfs ---
@@ -150,12 +150,12 @@ EOF
     # --- Symlink ~/.config/chromium to tmpfs ---
     local CHROMIUM_CFG="$INSTALL_HOME/.config/chromium"
     if [ -L "$CHROMIUM_CFG" ]; then
-        log_info "~/.config/chromium already symlinked"
+        log_info "$INSTALL_HOME/.config/chromium already symlinked"
     else
         rm -rf "$CHROMIUM_CFG"
         sudo -u "$INSTALL_USER" mkdir -p "$INSTALL_HOME/.config"
         sudo -u "$INSTALL_USER" ln -s /tmp/chromium-profile "$CHROMIUM_CFG"
-        log_success "~/.config/chromium redirected to tmpfs"
+        log_success "$INSTALL_HOME/.config/chromium redirected to tmpfs"
     fi
 
     # --- Disable unnecessary services ---

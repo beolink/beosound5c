@@ -1,0 +1,48 @@
+[
+ {
+  "name": "World",
+  "id": "world",
+  "articles": [
+   {
+    "name": "Demo headline: harbour lights restored",
+    "id": "w1",
+    "pages": [
+     "Demo content shipped with the BeoSound 5c emulator."
+    ]
+   },
+   {
+    "name": "Demo headline: night train returns",
+    "id": "w2",
+    "pages": [
+     "Demo content shipped with the BeoSound 5c emulator."
+    ]
+   }
+  ]
+ },
+ {
+  "name": "Culture",
+  "id": "culture",
+  "articles": [
+   {
+    "name": "Demo headline: a 2009 flagship, rebuilt",
+    "id": "c1",
+    "pages": [
+     "Demo content shipped with the BeoSound 5c emulator."
+    ]
+   }
+  ]
+ },
+ {
+  "name": "Technology",
+  "id": "tech",
+  "articles": [
+   {
+    "name": "Demo headline: reverse engineering the PC2",
+    "id": "t1",
+    "pages": [
+     "Demo content shipped with the BeoSound 5c emulator."
+    ]
+   }
+  ]
+ }
+]

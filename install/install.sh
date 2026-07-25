@@ -121,7 +121,7 @@ show_help() {
 show_summary() {
     local DEVICE_NAME PLAYER_TYPE PLAYER_IP HA_URL TRANSPORT_MODE
     local MQTT_BROKER MQTT_PORT OUTPUT_NAME VOLUME_TYPE VOLUME_HOST VOLUME_MAX
-    local BEOREMOTE_MAC HA_TOKEN SPOTIFY_REFRESH_TOKEN BT_DEVICE_NAME
+    local BEOREMOTE_MAC HA_TOKEN SPOTIFY_REFRESH_TOKEN
 
     if [ -f "$CONFIG_FILE" ]; then
         DEVICE_NAME=$(cfg_read '.device')
@@ -258,10 +258,11 @@ show_telemetry_notice() {
     if [ -f "$optout_file" ]; then
         log_info "Anonymous startup ping: disabled (NO_TELEMETRY present)"
     else
-        log_info "Anonymous startup ping: enabled — a tiny anonymous hello to"
-        log_info "beosound5c.com on startup (version, source names, player/volume"
-        log_info "type, hashed device id — see services/lib/beacon.py)."
-        log_info "Turn it off in the web config UI, or: touch $optout_file"
+        log_info "Anonymous startup ping: a tiny anonymous hello to beosound5c.com"
+        log_info "on startup (version, source names, player/volume type, random"
+        log_info "device id — see services/lib/beacon.py). Nothing is sent until"
+        log_info "you save the setup screen, where you can switch it off."
+        log_info "Or right now: touch $optout_file"
     fi
 }
 
@@ -329,6 +330,9 @@ case "$SUBCOMMAND" in
         # is broken by YouTube changes (same reason post-update.sh does this).
         if [ "$SUBCOMMAND" = "update" ]; then
             install_ytdlp
+            # Undo the guest Samba share older installs created (no-op after
+            # the first run) — see install/modules/samba-cleanup.sh.
+            bash "$INSTALL_DIR/install/modules/samba-cleanup.sh" || true
         fi
         ;;
 

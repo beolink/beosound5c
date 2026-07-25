@@ -7,7 +7,7 @@ source switch), canvas/non-canvas toggling, and text positioning.
 Takes screenshots at key moments for visual verification.
 
 Usage:
-    python3 tools/test-canvas-e2e.py [hostname]
+    python3 tools/canvas-e2e-check.py [hostname]
 
 Default hostname: beosound5c.local
 Screenshots saved to: /tmp/canvas-test-*.png

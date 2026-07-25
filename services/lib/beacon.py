@@ -8,10 +8,12 @@ sold.
 
 What is sent (one POST per service startup — everything is listed here):
 
-  device_id    uuid5 hash of the Pi's onboard MAC. One-way, so the MAC
-               itself never leaves the device. Derived rather than random
-               so a re-imaged device keeps its identity instead of
-               appearing on the map twice.
+  device_id    a random UUID4, made up on the device the first time it
+               pings and kept in a `device_id` file next to this code. It
+               is not derived from any hardware identifier — nothing about
+               the machine can be worked out from it. Re-image the SD card
+               and you get a new one; that just means one extra dot on the
+               map, which is a fine trade.
   version      software version string (e.g. "v0.9.2")
   sources      names of enabled sources (e.g. "spotify", "cd") — names
                only, never credentials or config values
@@ -22,6 +24,11 @@ The server infers a country from the request IP (via Cloudflare) and keeps
 only the country name. What is never sent: hostnames, device names,
 account names, credentials, IPs from config, or anything about what you
 listen to.
+
+Nothing is sent before the owner has been asked.  The first ping waits for
+``setup_complete`` in config.json, which is written when the web setup screen
+is saved — the same screen that carries the "Anonymous startup ping" toggle.
+A device that is installed but never set up never phones home.
 
 Opting out is one command and everything else works exactly the same:
 
@@ -42,14 +49,12 @@ logger = logging.getLogger('beacon')
 
 BEACON_URL = 'https://beosound5c.com/api/beacon'
 
-# Project-specific namespace so uuid5(namespace, mac) is unique to beosound5c
-# even if other projects derive UUIDs from the same MAC.
-_BEACON_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, 'beosound5c.com')
-
-# Onboard interfaces on a Pi — MACs are derived from the CPU serial, so they
-# are persistent across re-imaging. USB WiFi (wlan1+) is intentionally skipped:
-# the dongle is swappable and would invalidate the ID.
-_STABLE_IFACES = ('eth0', 'wlan0')
+# Older versions derived the id as uuid5(_LEGACY_NAMESPACE, onboard MAC),
+# which is reversible — the MAC keyspace is small enough to brute-force
+# against this (public) source.  Devices still holding such an id swap it for
+# a random one on next startup.  Safe to delete once the fleet has rolled over.
+_LEGACY_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, 'beosound5c.com')
+_LEGACY_IFACES = ('eth0', 'wlan0')
 
 _KNOWN_SYSTEM_KEYS = frozenset({
     'device', 'menu', 'scenes', 'player', 'volume',
@@ -58,16 +63,22 @@ _KNOWN_SYSTEM_KEYS = frozenset({
 })
 
 
-def _read_stable_mac() -> str | None:
-    for iface in _STABLE_IFACES:
+def _is_legacy_mac_derived(device_id: str) -> bool:
+    """True if this id is the old uuid5-of-our-own-MAC value.
+
+    Only ever matches on the machine the id was derived from, so it cannot
+    misfire on a random id that happens to belong to another device.
+    """
+    for iface in _LEGACY_IFACES:
         try:
             with open(f'/sys/class/net/{iface}/address') as f:
                 mac = f.read().strip().lower()
-            if mac and mac != '00:00:00:00:00:00':
-                return mac
         except OSError:
             continue
-    return None
+        if mac and mac != '00:00:00:00:00:00' \
+                and device_id == str(uuid.uuid5(_LEGACY_NAMESPACE, mac)):
+            return True
+    return False
 
 
 def _get_or_create_device_id(base_path: str) -> str:
@@ -78,22 +89,17 @@ def _get_or_create_device_id(base_path: str) -> str:
             if existing:
                 try:
                     uuid.UUID(existing)
-                    return existing
                 except ValueError:
-                    # Corrupted file (e.g. truncated by a power cut).  On
-                    # Pis the MAC-derived id below is deterministic, so
-                    # re-deriving restores the SAME identity instead of
-                    # beaconing as a phantom device forever.
-                    logger.debug('Invalid device_id %r — re-deriving', existing)
+                    # Corrupted file (e.g. truncated by a power cut) — fall
+                    # through and mint a new one.  The device shows up as a
+                    # second dot on the map; that is the whole cost.
+                    logger.debug('Invalid device_id %r — replacing', existing)
+                else:
+                    if not _is_legacy_mac_derived(existing):
+                        return existing
+                    logger.info('Replacing MAC-derived device_id with a random one')
 
-        mac = _read_stable_mac()
-        if mac:
-            device_id = str(uuid.uuid5(_BEACON_NAMESPACE, mac))
-            logger.debug('Derived device_id from MAC %s: %s', mac, device_id)
-        else:
-            device_id = str(uuid.uuid4())
-            logger.debug('No stable MAC available; generated random device_id: %s', device_id)
-
+        device_id = str(uuid.uuid4())
         with open(id_file, 'w') as f:
             f.write(device_id + '\n')
         return device_id
@@ -131,12 +137,32 @@ def _build_payload(base_path: str) -> dict:
     }
 
 
+def _setup_complete() -> bool:
+    """True once the owner has saved the web setup screen.
+
+    Until then they have not seen the telemetry toggle, so there is no
+    consent to act on and nothing is sent.  Unreadable config counts as
+    not-set-up: staying quiet is the safe direction.
+    """
+    try:
+        from lib.config import load_config
+        return bool(load_config().get('setup_complete'))
+    except Exception as e:
+        logger.debug('Could not read setup_complete: %s', e)
+        return False
+
+
 async def send_beacon(base_path: str) -> None:
     """Fire-and-forget. Logs result at DEBUG; never raises."""
     try:
         opt_out = os.path.join(base_path, 'NO_TELEMETRY')
         if os.path.isfile(opt_out):
             logger.debug('Telemetry disabled (NO_TELEMETRY file present)')
+            return
+
+        if not _setup_complete():
+            logger.debug('Setup not finished — no beacon until the owner has '
+                         'seen the telemetry toggle')
             return
 
         payload = _build_payload(base_path)

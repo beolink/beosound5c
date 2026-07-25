@@ -404,6 +404,26 @@ class SourceBase:
             return data.get("track_uri", "")
         return ""
 
+    async def reassert_player_media(self) -> bool:
+        """Re-broadcast what the player is *actually* playing right now.
+
+        Call after a failed play command: an optimistic pre-broadcast is now
+        wrong, and since nothing changed on the player, no change event will
+        ever correct it. Returns True if the player had current media."""
+        data = await self._player_get("media")
+        if data and data.get("title"):
+            await self.post_media_update(
+                title=data.get("title", ""),
+                artist=data.get("artist", ""),
+                album=data.get("album", ""),
+                artwork=data.get("artwork", "") or "",
+                state=data.get("state", "playing"),
+                reason="track_change",
+                track_uri=data.get("uri", ""),
+            )
+            return True
+        return False
+
     # ── HTTP server ──
 
     async def start(self):

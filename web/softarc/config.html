@@ -275,6 +275,7 @@
         .cfg-sf-save-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 
     </style>
+    <script src="../js/demo-backend.js"></script>
 </head>
 <body>
 
@@ -459,7 +460,8 @@ function renderDevice(cfg) {
         <div style="font-size:12px;color:#555;margin-top:6px;line-height:1.5">
             On startup, send a tiny anonymous hello to beosound5c.com for the world
             map of revived BeoSound 5s — version, source names, player/volume type,
-            and a one-way hash of the device MAC. No names, accounts, or credentials.
+            and a random ID this device made up for itself. Nothing about your
+            hardware, no names, accounts, or credentials.
         </div>
     </div>`;
 }
@@ -1905,6 +1907,15 @@ async function saveConfig() {
             body: JSON.stringify(cfg),
         });
         if (resp.ok) {
+            const d = await resp.json().catch(() => ({}));
+            if (d.status === 'warning') {
+                // Config landed but credentials didn't — say so rather than
+                // letting the owner believe their HA token was stored.
+                status.textContent = d.message || 'Saved with warnings';
+                status.style.color = '#ca4';
+                setTimeout(() => { popup.classList.remove('active'); }, 8000);
+                return;
+            }
             status.textContent = 'Restarting services...';
             pollReconnect();
         } else {

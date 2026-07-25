@@ -1,0 +1,32 @@
+[
+ {
+  "id": "dinner",
+  "name": "Dinner",
+  "icon": "fork-knife",
+  "color": "#fa0"
+ },
+ {
+  "id": "cozy",
+  "name": "Cozy",
+  "icon": "fire",
+  "color": "#fa0"
+ },
+ {
+  "id": "reading",
+  "name": "Reading",
+  "icon": "book-open",
+  "color": "#fa0"
+ },
+ {
+  "id": "all_on",
+  "name": "All on",
+  "icon": "sun",
+  "color": "#fa0"
+ },
+ {
+  "id": "all_off",
+  "name": "All off",
+  "icon": "power",
+  "color": "#c55"
+ }
+]

@@ -43,6 +43,15 @@ done
 
 echo ""
 
+# Remove system config installed alongside the services. fstab/tmpfs and
+# journald changes from sd-hardening are deliberately left alone — they are
+# generic SD-protection settings and reverting mounts on a live system is
+# riskier than leaving them.
+echo "🧹 Removing sudoers and udev rules..."
+rm -f /etc/sudoers.d/beosound5c
+rm -f /etc/udev/rules.d/99-bs5.rules
+udevadm control --reload-rules 2>/dev/null
+
 # Reload systemd daemon
 echo "🔄 Reloading systemd daemon..."
 systemctl daemon-reload

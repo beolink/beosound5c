@@ -52,10 +52,13 @@ class LocalPlayer(PlayerBase):
         self._process: subprocess.Popen | None = None
         self._watcher_task: asyncio.Task | None = None
         # go-librespot backend
-        self._librespot = LibrespotClient(on_event=self._on_librespot_event)
+        self._librespot = LibrespotClient(on_event=self._on_librespot_event,
+                                          on_connect=self._reconcile_librespot)
         # Which backend is currently active: "mpv", "librespot", or None
         self._active_backend: str | None = None
         self._stop_time: float = 0  # monotonic time of last explicit stop
+        self._reconcile_task: asyncio.Task | None = None
+        self._current_url: str | None = None  # URL mpv was started with
 
     @property
     def _librespot_available(self) -> bool:
@@ -115,6 +118,7 @@ class LocalPlayer(PlayerBase):
                 ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env)
                 self._active_backend = 'mpv'
                 self._current_playback_state = 'playing'
+                self._current_url = url
                 self._watcher_task = asyncio.create_task(self._watch_process())
                 logger.info("Playing URL via mpv: %s", url)
                 return True
@@ -225,6 +229,11 @@ class LocalPlayer(PlayerBase):
             status = await self._librespot.status()
             if status and status.get('track'):
                 return status['track'].get('uri', '')
+        if (self._active_backend == 'mpv' and self._process
+                and self._process.poll() is None):
+            # The URL mpv was started with — lets sources verify that what
+            # they believe is playing is actually what the player runs
+            return self._current_url or ''
         return ''
 
     async def get_spotify_status(self) -> dict:
@@ -282,34 +291,23 @@ class LocalPlayer(PlayerBase):
             # event arrives BEFORE 'playing' sets the backend, and dropping
             # it leaves the playing view empty until the next track.
             if self._active_backend not in (None, 'librespot'):
-                return
+                return  # mpv owns audio — librespot events are advance noise
             if self._active_backend is None and self._recently_stopped():
-                return  # post-stop auto-advance noise, not an external start
-            # New track loaded — broadcast media update
-            artists = data.get('artist_names', [])
-            media_data = {
-                'title': data.get('name', ''),
-                'artist': ', '.join(artists) if artists else '',
-                'album': data.get('album_name', ''),
-                'artwork': data.get('album_cover_url', ''),
-                'duration': data.get('duration', 0),
-                'position': data.get('position', 0),
-                'state': 'playing',
-            }
-            # Fetch and embed artwork as base64 (same as Sonos player)
-            artwork_url = data.get('album_cover_url')
-            if artwork_url:
-                art = await self.fetch_artwork(artwork_url)
-                if art:
-                    media_data['artwork'] = f"data:image/jpeg;base64,{art['base64']}"
-            await self.broadcast_media_update(media_data, reason='track_change')
-            logger.info("Librespot track: %s — %s",
-                        media_data['artist'], media_data['title'])
+                # Post-stop auto-advance noise, not an external start — but
+                # reconcile after the cooldown: if playback was genuinely
+                # restarted (e.g. from the Spotify app during the cooldown),
+                # the gate would otherwise stay closed and drop metadata forever
+                self._schedule_reconcile()
+                return
+            await self._broadcast_librespot_track(data)
 
         elif event_type == 'playing':
             # Ignore play events right after explicit stop — go-librespot
-            # may briefly resume/advance before the pause takes effect
+            # may briefly resume/advance before the pause takes effect.
+            # Reconcile after the cooldown: if it is STILL playing then, it
+            # was a real (re)start and reality wins over our 'stopped' belief.
             if self._recently_stopped():
+                self._schedule_reconcile()
                 return
             was_stopped = self._current_playback_state in ('stopped', None)
             self._current_playback_state = 'playing'
@@ -342,6 +340,85 @@ class LocalPlayer(PlayerBase):
             logger.info("go-librespot became inactive (playback transferred away)")
             await self.notify_router_playback_override(force=True)
 
+    async def _broadcast_librespot_track(self, data: dict):
+        """Broadcast a librespot track (metadata-event or /status 'track' shape)."""
+        artists = data.get('artist_names', [])
+        media_data = {
+            'title': data.get('name', ''),
+            'artist': ', '.join(artists) if artists else '',
+            'album': data.get('album_name', ''),
+            'artwork': data.get('album_cover_url', ''),
+            'duration': data.get('duration', 0),
+            'position': data.get('position', 0),
+            'state': 'playing',
+        }
+        # Fetch and embed artwork as base64 (same as Sonos player)
+        artwork_url = data.get('album_cover_url')
+        if artwork_url:
+            art = await self.fetch_artwork(artwork_url)
+            if art:
+                media_data['artwork'] = f"data:image/jpeg;base64,{art['base64']}"
+        await self.broadcast_media_update(media_data, reason='track_change')
+        logger.info("Librespot track: %s — %s",
+                    media_data['artist'], media_data['title'])
+
+    # ── librespot state reconciliation ──
+    #
+    # Events are the fast path, but they can be dropped (stop cooldown,
+    # backend gate) or missed entirely (WS outage). Reconciliation queries
+    # /status — go-librespot's actual state is the truth and always wins.
+
+    def _schedule_reconcile(self):
+        if self._reconcile_task and not self._reconcile_task.done():
+            return
+        self._reconcile_task = self._spawn(self._delayed_reconcile(),
+                                           name="librespot_reconcile")
+
+    async def _delayed_reconcile(self):
+        # Wait out the stop cooldown (plus settle margin) so we don't adopt
+        # a 'playing' that the in-flight stop is about to turn into a pause
+        while self._recently_stopped():
+            await asyncio.sleep(1.0)
+        await asyncio.sleep(0.5)
+        await self._reconcile_librespot()
+
+    async def _reconcile_librespot(self):
+        """Adopt go-librespot's actual state when our belief may be stale."""
+        if self._recently_stopped():
+            self._schedule_reconcile()
+            return
+        if self._active_backend == 'mpv':
+            return  # mpv owns audio; librespot is paused by design
+        try:
+            status = await self._librespot.status()
+        except Exception as e:
+            logger.debug("Reconcile: status fetch failed: %s", e)
+            return
+        if not status:
+            return
+        track = status.get('track') or {}
+        playing = bool(track) and not status.get('stopped') and not status.get('paused')
+
+        if playing:
+            if (self._active_backend != 'librespot'
+                    or self._current_playback_state != 'playing'):
+                logger.info("Reconcile: go-librespot is playing (%s) — adopting",
+                            track.get('name', ''))
+                was_stopped = self._current_playback_state in ('stopped', None)
+                self._active_backend = 'librespot'
+                self._current_playback_state = 'playing'
+                if was_stopped:
+                    await self.trigger_wake()
+                    await self.trigger_output_on()
+                if self.seconds_since_command() > USER_ACTION_HORIZON:
+                    await self.notify_router_playback_override(force=True)
+                await self._broadcast_librespot_track(track)
+        elif (self._active_backend == 'librespot'
+                and self._current_playback_state == 'playing'):
+            actual = 'paused' if status.get('paused') else 'stopped'
+            logger.info("Reconcile: go-librespot is %s — correcting state", actual)
+            self._current_playback_state = actual
+
     # ── mpv management ──
 
     async def _kill_mpv(self):
@@ -362,6 +439,7 @@ class LocalPlayer(PlayerBase):
             except subprocess.TimeoutExpired:
                 self._process.kill()
             self._process = None
+        self._current_url = None
 
     async def _watch_process(self):
         """Watch for mpv process exit."""

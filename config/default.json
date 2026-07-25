@@ -14,9 +14,7 @@
     "NEWS": "news",
     "RADIO": "radio",
     "SCENES": "scenes",
-    "SECURITY": { "url": "softarc/security.html" },
-    "SYSTEM": "system",
-    "SHOWING": "showing"
+    "SYSTEM": "system"
   },
 
   "scenes": [

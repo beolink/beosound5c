@@ -1,0 +1,41 @@
+[
+ {
+  "type": "station",
+  "name": "Jazz24",
+  "id": "demo-jazz24",
+  "path": "station/jazz24",
+  "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMjEwLDQ1JSwzNCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMjUwLDUwJSwxMyUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9InVybCgjZykiLz48dGV4dCB4PSI1MCUiIHk9IjQ3JSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2ZmZiIgZm9udC1mYW1pbHk9IkhlbHZldGljYSBOZXVlLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGxldHRlci1zcGFjaW5nPSIxLjUiPkpBWloyNDwvdGV4dD48dGV4dCB4PSI1MCUiIHk9IjU4JSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwuNykiIGZvbnQtZmFtaWx5PSJIZWx2ZXRpY2EgTmV1ZSxzYW5zLXNlcmlmIiBmb250LXNpemU9IjkiPlVuaXRlZCBTdGF0ZXM8L3RleHQ+PC9zdmc+",
+  "url_resolved": "",
+  "favicon": "",
+  "country": "United States",
+  "tags": "jazz",
+  "codec": "MP3",
+  "bitrate": 192
+ },
+ {
+  "type": "station",
+  "name": "Radio Swiss Classic",
+  "id": "demo-radio-swiss-classic",
+  "path": "station/radio-swiss-classic",
+  "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMTUwLDQ1JSwzNCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMTkwLDUwJSwxMyUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9InVybCgjZykiLz48dGV4dCB4PSI1MCUiIHk9IjQ3JSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2ZmZiIgZm9udC1mYW1pbHk9IkhlbHZldGljYSBOZXVlLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGxldHRlci1zcGFjaW5nPSIxLjUiPlJBRElPIFNXSVNTIDwvdGV4dD48dGV4dCB4PSI1MCUiIHk9IjU4JSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwuNykiIGZvbnQtZmFtaWx5PSJIZWx2ZXRpY2EgTmV1ZSxzYW5zLXNlcmlmIiBmb250LXNpemU9IjkiPlN3aXR6ZXJsYW5kPC90ZXh0Pjwvc3ZnPg==",
+  "url_resolved": "",
+  "favicon": "",
+  "country": "Switzerland",
+  "tags": "classical",
+  "codec": "MP3",
+  "bitrate": 192
+ },
+ {
+  "type": "station",
+  "name": "NTS 1",
+  "id": "demo-nts-1",
+  "path": "station/nts-1",
+  "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woOTAsNDUlLDM0JSkiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9ImhzbCgxMzAsNTAlLDEzJSkiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0idXJsKCNnKSIvPjx0ZXh0IHg9IjUwJSIgeT0iNDclIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIiBmb250LWZhbWlseT0iSGVsdmV0aWNhIE5ldWUsc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgbGV0dGVyLXNwYWNpbmc9IjEuNSI+TlRTIDE8L3RleHQ+PHRleHQgeD0iNTAlIiB5PSI1OCUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsLjcpIiBmb250LWZhbWlseT0iSGVsdmV0aWNhIE5ldWUsc2Fucy1zZXJpZiIgZm9udC1zaXplPSI5Ij5Vbml0ZWQgS2luZ2RvbTwvdGV4dD48L3N2Zz4=",
+  "url_resolved": "",
+  "favicon": "",
+  "country": "United Kingdom",
+  "tags": "electronic",
+  "codec": "MP3",
+  "bitrate": 192
+ }
+]

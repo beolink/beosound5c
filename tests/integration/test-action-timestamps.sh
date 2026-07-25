@@ -35,7 +35,7 @@ scp -o ConnectTimeout=5 -q \
 EXIT=0
 
 run_suite() {
-    local name="$1" file="$2"
+    local file="$2"
     echo ""
     ssh -o ConnectTimeout=5 "$HOST" "python3 /tmp/$file"
     local rc=$?

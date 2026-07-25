@@ -101,7 +101,7 @@ VOL_DEFAULT = int(cfg("volume", "default", default=30))
 #
 # Roles 2/3/4 are mutually exclusive — pick exactly one via masterlink.role.
 # IR decoding (1) runs alongside whichever role is selected.  Outstanding
-# work tracked in docs/plan-masterlink-roles.md.  cfg() is two-level only;
+# work tracked in docs/masterlink-roles.md.  cfg() is two-level only;
 # nested fields go through dict access on the masterlink block.
 _ML_CFG = cfg("masterlink", default={}) or {}
 ML_ROLE = (_ML_CFG.get("role") or "master").lower()
@@ -223,7 +223,7 @@ class PC2Device:
     # The PC2's USB-side address filter stays in audio-master mode — it
     # still passes broadcasts and 0xC1-addressed traffic.  Receiving traffic
     # specifically addressed to 0xC2 may need a filter flip; tracked in
-    # docs/plan-masterlink-roles.md.
+    # docs/masterlink-roles.md.
     OUR_NODE_ID = 0xC1  # AUDIO_MASTER (default; instance overrides for non-master roles)
 
     # Reconnect settings
@@ -511,7 +511,7 @@ class PC2Device:
         mixer_state, so the cached state isn't reliable.  Restoring local
         audio after a burst — when local listeners are present — needs
         proper hardware testing before we layer it in.  Tracked in
-        docs/plan-masterlink-roles.md."""
+        docs/masterlink-roles.md."""
         if self._session_mode == mode:
             return
         prev = self._session_mode

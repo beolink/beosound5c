@@ -793,7 +793,6 @@ class PlayerBase:
         """
         if volume == self._last_reported_volume:
             return
-        self._last_reported_volume = volume
         if not self._session_ready():
             return
         try:
@@ -803,6 +802,10 @@ class PlayerBase:
                 timeout=aiohttp.ClientTimeout(total=2),
             ) as resp:
                 if resp.status == 200:
+                    # Mark reported only on success — a failed report must not
+                    # dedup away the retry, or the UI arc stays wrong until the
+                    # volume changes to a *different* value.
+                    self._last_reported_volume = volume
                     log.info("Reported volume %d%% to router", volume)
                 else:
                     log.debug("Router volume report returned %d", resp.status)

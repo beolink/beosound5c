@@ -49,3 +49,7 @@ web/json/config.json
 web/json/*_playlists.json
 web/json/*_digit_playlists.json
 web/json/playlists_with_tracks.json
+
+# Pre-rewrite public-repo backup (4.8MB, contains the credentials that were
+# purged from public history — keep locally, never commit)
+private/leaked-review-*/pre-rewrite-public-repo.bundle

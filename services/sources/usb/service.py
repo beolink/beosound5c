@@ -508,7 +508,7 @@ class USBService(SourceBase):
                 # We already registered as playing (pre-broadcast above
                 # stops the previous source and powers speakers) — roll
                 # back so the router doesn't show USB playing nothing.
-                await self.register('available')
+                await self._revert_failed_play()
                 return False
         else:
             file_paths = [t['file_path'] for t in tracks_meta if t['file_path']]
@@ -518,8 +518,17 @@ class USBService(SourceBase):
             )
             self.file_player._tracks_meta = tracks_meta
             await self.file_player.play_track(start_index)
+            if self.file_player.state != 'playing':
+                await self._revert_failed_play()
+                return False
 
         return True
+
+    async def _revert_failed_play(self):
+        """Playback failed after the optimistic register/broadcast — show the
+        player's actual media instead, or drop back to available."""
+        if not await self.reassert_player_media():
+            await self.register('available')
 
     async def _album_skip(self, direction):
         """Jump to the first track of the next/previous album (BM5 only).

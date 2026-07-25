@@ -1,0 +1,26 @@
+{
+ "1": {
+  "id": "demo-spotify-0",
+  "name": "Morning Coffee"
+ },
+ "2": {
+  "id": "demo-spotify-1",
+  "name": "Late Night Strings"
+ },
+ "3": {
+  "id": "demo-spotify-2",
+  "name": "Kitchen Jazz"
+ },
+ "4": {
+  "id": "demo-spotify-3",
+  "name": "Nordic Ambient"
+ },
+ "5": {
+  "id": "demo-spotify-4",
+  "name": "Hi-Fi Test Tracks"
+ },
+ "6": {
+  "id": "demo-spotify-5",
+  "name": "Acoustic Guitar"
+ }
+}

@@ -48,8 +48,8 @@ while true; do
   $connected || { echo "=== CONNECT FAILED ==="; sleep 5; continue; }
 
   echo "=== STATE: SUBSCRIBE ==="
-  printf "char-write-req %s 0100\n" "$DESC1" >&"$GTOOL_IN" 2>/dev/null
-  printf "char-write-req %s 0100\n" "$DESC2" >&"$GTOOL_IN" 2>/dev/null
+  printf "char-write-req %s 0100\n" "$DESC1" >&"$GTOOL_IN"
+  printf "char-write-req %s 0100\n" "$DESC2" >&"$GTOOL_IN"
   sleep 0.1
 
   echo "=== STATE: LISTEN LOOP ==="

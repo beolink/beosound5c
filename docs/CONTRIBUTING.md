@@ -35,7 +35,8 @@ By contributing, you agree that your contributions will be licensed under the sa
 
 ## Local Development
 
-The web UI includes built-in hardware emulation — no physical BS5 required:
+The web UI includes built-in hardware emulation and a demo backend — no
+physical BS5 and no running services required:
 
 ```bash
 cd web && python3 -m http.server 8000
@@ -43,6 +44,18 @@ cd web && python3 -m http.server 8000
 ```
 
 Controls: mouse wheel = laser, arrow up/down = nav wheel, PageUp/PageDown = volume, arrow left/right + Enter = buttons.
+
+Because there are no `beo-*` services behind a static server, the UI switches
+itself into demo mode (anything not served from port 80 — override with
+`?demo=false`). `web/js/demo-backend.js` then stands in for the services it
+would normally talk to: the arc menu, now-playing metadata, and per-source
+browse data come from `web/json/demo/`. Everything else fails exactly as it
+does on a device with a service stopped, so what you see is the real UI code
+path, not a parallel mock UI.
+
+Add a source to the demo by giving it an entry in `MENU` and a data file in
+`SOURCE_DATA` (both in `demo-backend.js`), matching the shape that source's
+service returns.
 
 To add live Sonos artwork and metadata, set `player.ip` in `config/default.json` and run:
 

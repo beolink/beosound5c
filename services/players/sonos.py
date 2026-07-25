@@ -109,7 +109,10 @@ class SonosArtworkViewer:
 
     def __init__(self, sonos_ip, player=None):
         self.sonos_ip = sonos_ip
-        self.sonos = SoCo(sonos_ip)
+        # Fresh installs ship player.ip="" — SoCo raises on an invalid IP,
+        # which would crash the service in __init__ before the on_start
+        # guard can exit cleanly. The guard runs before self.sonos is used.
+        self.sonos = SoCo(sonos_ip) if sonos_ip else None
         self._player = player  # PlayerBase instance for artwork cache
         self._cached_coordinator = None
         self._coordinator_check_time = 0
@@ -716,7 +719,21 @@ class MediaServer(PlayerBase):
         return ["spotify", "url_stream", "spotify_track_radio"]
 
     async def get_track_uri(self) -> str:
-        return self._current_track_id or ""
+        return self._normalize_track_uri(self._current_track_id or "")
+
+    @staticmethod
+    def _normalize_track_uri(raw: str) -> str:
+        """Return a canonical track URI for source-side comparison.
+
+        Sonos reports Spotify content as ``x-sonos-spotify:spotify%3atrack%3a
+        <id>?sid=…`` — sources compare against ``spotify:track:<id>``, so
+        decode that form. Other schemes are returned unchanged."""
+        if raw.startswith("x-sonos-spotify:"):
+            from urllib.parse import unquote
+            inner = unquote(raw.split(":", 1)[1]).split("?", 1)[0]
+            if inner.startswith("spotify:"):
+                return inner
+        return raw
 
     async def get_status(self) -> dict:
         """Rich cached status for the system panel."""
@@ -858,6 +875,18 @@ class MediaServer(PlayerBase):
     # ── PlayerBase hooks ──
 
     async def on_start(self):
+        if not SONOS_IP:
+            # Exit 0, not 1 — with Restart=on-failure this keeps the
+            # unconfigured service stopped instead of crash-looping (and
+            # beo-health from churn-restarting it). READY=1 must be sent
+            # first: the unit is Type=notify and the normal READY=1 never
+            # happens on this path (same convention as heos.py).
+            logger.error("No Sonos IP configured (set player.ip in "
+                         "config) — exiting")
+            from lib.watchdog import sd_notify
+            sd_notify("READY=1\nSTATUS=No player.ip configured, exiting")
+            sd_notify("STOPPING=1")
+            sys.exit(0)
         logger.info("Starting media server for Sonos at %s", SONOS_IP)
         self._monitor_task = self._spawn(self.monitor_sonos(), name="sonos_monitor")
         # Network discovery loop + default-player polling
@@ -1281,6 +1310,7 @@ class MediaServer(PlayerBase):
             media_data = await self.fetch_media_data()
             if media_data:
                 await self.broadcast_media_update(media_data, "track_change")
+                self._pending_broadcast = False
         except Exception as e:
             logger.warning("Eager media broadcast on play start failed: %s", e)
 
@@ -1408,7 +1438,9 @@ class MediaServer(PlayerBase):
                             elapsed = now - (self._suppress.until - USER_ACTION_HORIZON)
                             logger.info("Broadcast suppression expired (%.1fs)", elapsed)
                             self._suppress = None
-                            suppress = True  # one more cycle — let next poll pick up clean state
+                            # Don't suppress this cycle — a change landing right
+                            # at expiry should broadcast, and _pending_broadcast
+                            # below covers changes swallowed earlier in the window.
                         else:
                             suppress = True
 

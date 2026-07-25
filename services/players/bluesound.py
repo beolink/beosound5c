@@ -369,11 +369,18 @@ class BluesoundPlayer(PlayerBase):
                             name="playback_override")
 
                 elif self._cached_media_data:
-                    # Update position/state in cached data without full broadcast
+                    # Update position/state in cached data; broadcast when the
+                    # state itself changed (e.g. external pause from the BluOS
+                    # app) — otherwise the UI shows "playing" indefinitely
+                    state_changed = self._cached_media_data.get("state") != state
                     self._cached_media_data["state"] = state
                     self._cached_media_data["position"] = self._seconds_to_time(secs)
                     if vol_str:
                         self._cached_media_data["volume"] = int(vol_str)
+                    if state_changed:
+                        logger.info("Playback state changed → %s", state)
+                        await self.broadcast_media_update(
+                            self._cached_media_data, "state_change")
 
             except asyncio.CancelledError:
                 break

@@ -19,12 +19,10 @@ const CameraOverlayManager = {
         cameraSnapshotUrl: 'http://localhost:8767/camera/snapshot'
     },
 
-    // Get cameras from config or use defaults
+    // Cameras come from config.json ("cameras"). No invented fallback: a
+    // device with none configured has no camera overlay.
     get defaultCameras() {
-        return window.AppConfig?.cameras || [
-            { id: 'door', title: 'Door', entity: 'camera.front_door' },
-            { id: 'gate', title: 'Gate', entity: 'camera.gate' }
-        ];
+        return window.AppConfig?.cameras || [];
     },
 
     // Button action definitions - matches physical BeoSound 5 button bar
@@ -98,10 +96,18 @@ const CameraOverlayManager = {
         }
 
         this.currentData = data;
-        this.isActive = true;
 
-        // Set up cameras - use provided or defaults
+        // Cameras from the caller, else from config.
         this.cameras = data.cameras || this.defaultCameras;
+        if (!this.cameras.length) {
+            // Nothing configured: an empty overlay, or one wired to guessed
+            // entity ids, is worse than no overlay.
+            console.log('[CAMERA] No cameras configured — overlay skipped');
+            this.isActive = false;
+            return;
+        }
+
+        this.isActive = true;
 
         // Update action labels if provided
         if (data.actions) {

@@ -95,7 +95,7 @@ class ProviderRole:
 
     Today we only claim N.MUSIC.  N.RADIO needs a separate capture against
     a real BC2/BS9000 to discover the source-burst shape — see
-    docs/plan-masterlink-roles.md.
+    docs/masterlink-roles.md.
     """
 
     def __init__(self, pc2):

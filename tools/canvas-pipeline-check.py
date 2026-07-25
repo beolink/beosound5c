@@ -6,7 +6,7 @@ Tests the full chain: canvas fetch → source_base → router → WebSocket → 
 Run from dev machine against a live device.
 
 Usage:
-    python3 tools/test-canvas-pipeline.py [hostname]
+    python3 tools/canvas-pipeline-check.py [hostname]
 
 Default hostname: beosound5c.local
 Requires: SP_DC or SPOTIFY_SP_DC env var, SSH access to device.

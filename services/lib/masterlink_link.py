@@ -19,7 +19,7 @@
 # msg_type 0x02 frames, which masterlink.py's `process_beo4_keycode`
 # already decodes role-agnostically and forwards to the router.  Outbound
 # transport-key TX from our local remote *back* to the master is parked
-# in docs/plan-masterlink-roles.md (it surfaces from local Beo4 input,
+# in docs/masterlink-roles.md (it surfaces from local Beo4 input,
 # not from ML).
 #
 # Byte offsets and info_type meanings come from ml-debug/const.py

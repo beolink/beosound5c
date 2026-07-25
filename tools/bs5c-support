@@ -42,10 +42,29 @@ auth_key() {
 }
 
 cmd_start() {
+    # Installed on first use rather than by the installer: a remote-access
+    # daemon on every device, for a feature most owners never touch, is not a
+    # reasonable default. Asking makes it the owner's decision.
     if ! command -v tailscale &>/dev/null; then
-        echo -e "${RED}Tailscale is not installed.${NC}"
-        echo "Run: curl -fsSL https://tailscale.com/install.sh | sudo sh"
-        exit 1
+        echo -e "${YELLOW}Remote support uses Tailscale, which isn't installed.${NC}"
+        echo ""
+        echo "  It will be fetched from tailscale.com and installed with:"
+        echo -e "  ${CYAN}curl -fsSL https://tailscale.com/install.sh | sudo sh${NC}"
+        echo ""
+        echo "  Nothing connects anywhere until you finish this command with"
+        echo "  an access key, and 'bs5c-support stop' shuts the daemon down."
+        echo ""
+        read -r -p "Install Tailscale now? [y/N] " reply
+        case "$reply" in
+            [Yy]*) ;;
+            *) echo "Cancelled — no changes made."; exit 1 ;;
+        esac
+        if ! curl -fsSL https://tailscale.com/install.sh | sudo sh; then
+            echo -e "${RED}Tailscale install failed.${NC}"
+            exit 1
+        fi
+        # Installed, but nothing runs until the session actually starts below.
+        sudo systemctl disable --now tailscaled 2>/dev/null || true
     fi
 
     # Check if already connected

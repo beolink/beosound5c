@@ -210,7 +210,9 @@ class AppleMusicService(DigitPlaylistMixin, SourceBase):
         Checks if the player still has our content before deciding to
         resume (preserves queue position) or re-queue."""
         track_uri = await self.player_track_uri()
-        if track_uri and "apple" in track_uri.lower():
+        # Sonos reports Apple Music content as x-sonos-http:song%3a…?sid=204 —
+        # no "apple" substring, so match the service id as well
+        if track_uri and ("apple" in track_uri.lower() or "sid=204" in track_uri):
             log.info("Activate: player has Apple Music content, resuming")
             await self.player_resume()
             self.state = "playing"
@@ -322,6 +324,7 @@ class AppleMusicService(DigitPlaylistMixin, SourceBase):
             self._start_polling()
         else:
             log.error("Player service failed to start playlist")
+            await self._revert_failed_play()
 
     async def _play_track(self, url):
         """Play a specific track by Apple Music URL."""
@@ -333,6 +336,14 @@ class AppleMusicService(DigitPlaylistMixin, SourceBase):
             self._start_polling()
         else:
             log.error("Player service failed to play track: %s", url)
+            await self._revert_failed_play()
+
+    async def _revert_failed_play(self):
+        """A play command failed — any optimistic pre-broadcast is now wrong.
+        Re-assert what the player actually plays, or deactivate."""
+        if not await self.reassert_player_media():
+            self.state = "stopped"
+            await self.register("available")
 
     async def _toggle(self):
         if self.state == "playing":

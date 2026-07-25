@@ -693,7 +693,8 @@ class SpotifyService(DigitPlaylistMixin, SourceBase):
             uri=play_uri, track_uri=track_uri, track_uris=all_track_uris,
             action_ts=action_ts)
         if not ok:
-            log.error("Player service failed to start playlist")
+            log.error("Player service failed to start playlist — reverting")
+            await self._revert_failed_play()
 
     async def _play_track(self, uri, action_ts=None):
         """Play a specific track."""
@@ -705,7 +706,16 @@ class SpotifyService(DigitPlaylistMixin, SourceBase):
         self._start_polling()
         ok = await self.player_play(uri=url, action_ts=action_ts)
         if not ok:
-            log.error("Player service failed to start track")
+            log.error("Player service failed to start track — reverting")
+            await self._revert_failed_play()
+
+    async def _revert_failed_play(self):
+        """A play command failed after the optimistic register/broadcast.
+        Show what the player actually plays, or drop back to available —
+        never leave the UI claiming a track that was never started."""
+        if not await self.reassert_player_media():
+            self.state = "stopped"
+            await self.register("available")
 
     async def _play_track_radio(self, track_uri, action_ts=None):
         """Start track radio seeded by *track_uri*.

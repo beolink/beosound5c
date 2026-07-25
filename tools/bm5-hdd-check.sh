@@ -17,7 +17,7 @@ if [ -z "$NTFS_PARTS" ]; then
 fi
 
 echo "NTFS partitions found:"
-echo "$NTFS_PARTS" | while read -r name fs size mp; do
+echo "$NTFS_PARTS" | while read -r name _ size mp; do
     echo "  /dev/$name  ${size}  ${mp:-(not mounted)}"
 done
 echo
@@ -27,7 +27,7 @@ BM5_MOUNT=""
 PROBE_MOUNT=""  # track temp mount so we can clean up
 
 # Check already-mounted partitions first (including service mounts at /mnt/beo-usb-*)
-while read -r name fs size mp; do
+while read -r name _ size mp; do
     if [ -n "$mp" ] && [ -d "$mp/BM-Share/Music" ]; then
         BM5_MOUNT="$mp"
         BM5_DEV="/dev/$name"
@@ -37,7 +37,7 @@ done <<< "$NTFS_PARTS"
 
 # Try mounting unmounted ones (temporary probe — cleaned up on exit)
 if [ -z "$BM5_MOUNT" ]; then
-    while read -r name fs size mp; do
+    while read -r name _ size mp; do
         [ -n "$mp" ] && continue
         TMP="/tmp/bm5-probe-$name"
         mkdir -p "$TMP"

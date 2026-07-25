@@ -27,7 +27,7 @@ fi
 # Deploy latest code to target device only
 echo ""
 echo "── Deploying latest code ──"
-cd "$PROJECT_DIR"
+cd "$PROJECT_DIR" || exit 1
 BEOSOUND5C_HOSTS="$HOST" ./deploy.sh beo-router beo-player-local beo-source-spotify beo-source-plex beo-source-radio beo-source-usb
 echo ""
 

@@ -58,14 +58,9 @@ install_system_packages() {
     apt-get install -y \
         espeak-ng
 
-    log_info "Installing Tailscale (remote support)..."
-    if ! command -v tailscale &>/dev/null; then
-        curl -fsSL https://tailscale.com/install.sh | sh
-        # Installed but not started — user runs 'bs5c-support' when needed
-        systemctl disable --now tailscaled 2>/dev/null || true
-    else
-        log_info "Tailscale already installed"
-    fi
+    # Tailscale is NOT installed here. Remote support is a thing you opt into,
+    # not something every device should carry a daemon for — `bs5c-support`
+    # installs it the first time you actually start a session.
     # Install bs5c-support command
     cp "$INSTALL_DIR/tools/bs5c-support" /usr/local/bin/bs5c-support
     chmod +x /usr/local/bin/bs5c-support
@@ -77,8 +72,7 @@ install_system_packages() {
         git \
         jq \
         mosquitto-clients \
-        openssl \
-        samba
+        openssl
 
     log_info "Installing CD/media packages..."
     apt-get install -y \
@@ -135,7 +129,11 @@ RAOP_EOF
 }
 
 # =============================================================================
-# USB music auto-mount + Samba share (NTFS drives exposed for Sonos)
+# USB music auto-mount
+#
+# Files reach remote players (Sonos/Bluesound/HEOS) over HTTP from the USB
+# source service — see services/lib/file_playback/remote_player.py.  Nothing
+# in the system needs a file share, so none is installed.
 # =============================================================================
 install_usb_music_support() {
     log_section "USB Music Support"
@@ -154,23 +152,6 @@ install_usb_music_support() {
         log_info "USB music mount files not found — skipping"
     fi
 
-    # Samba share for USB music
-    if ! grep -q "USB-Music" /etc/samba/smb.conf 2>/dev/null; then
-        log_info "Adding USB-Music Samba share..."
-        cat >> /etc/samba/smb.conf << 'SAMBA_EOF'
-
-[USB-Music]
-    comment = Auto-mounted USB music drives
-    path = /mnt/usb-music
-    read only = yes
-    guest ok = yes
-    browseable = yes
-    follow symlinks = yes
-    wide links = yes
-SAMBA_EOF
-        systemctl restart smbd 2>/dev/null || true
-        log_success "Samba share configured"
-    else
-        log_info "USB-Music Samba share already configured"
-    fi
+    # Undo the guest Samba share older installs added (see the script header).
+    bash "$INSTALL_DIR/install/modules/samba-cleanup.sh" || true
 }

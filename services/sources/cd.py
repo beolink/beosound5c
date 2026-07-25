@@ -319,6 +319,9 @@ class CDPlayer:
         self._ipc_writer = None
         self._pause_timer = None
         self._pending_track = None  # track we're seeking to (suppress stale events)
+        self._file_loaded = False  # mpv rejects seeks until the CDDA stream is loaded
+        self._launching = False    # mpv spawn in progress — queue track selections
+        self._seek_retries = 0     # re-seek attempts for the current pending track
         self._volume = 100.0  # track mpv volume internally (avoids IPC read races)
         # Detect mpv CD device flag (--cdrom-device pre-0.39, --cdda-device 0.39+)
         try:
@@ -353,6 +356,17 @@ class CDPlayer:
 
     async def _launch_mpv(self, start_track=1):
         """Launch mpv with cdda:// and a chapters file for track seeking."""
+        self._launching = True
+        self._file_loaded = False
+        self._pending_track = None
+        self._seek_retries = 0
+        self.current_track = start_track
+        try:
+            await self._do_launch_mpv(start_track)
+        finally:
+            self._launching = False
+
+    async def _do_launch_mpv(self, start_track):
         if self._on_before_play:
             await self._on_before_play()
 
@@ -399,10 +413,10 @@ class CDPlayer:
 
         await self._send_ipc({'command': ['observe_property', 1, 'chapter']})
         self._ipc_task = asyncio.create_task(self._read_ipc_events())
-        self.current_track = start_track
         self.state = 'playing'
         self._volume = 100.0
-        self._pending_track = None
+        # current_track/_pending_track are NOT reset here — a track selected
+        # while mpv was spawning is queued in _pending_track and applied on load.
         log.info(f"mpv launched — cdda:// with {len(self.track_offsets)} chapters, start track {start_track}")
 
     # ── IPC communication ──
@@ -437,11 +451,21 @@ class CDPlayer:
                     msg = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                if (msg.get('event') == 'property-change'
+                if msg.get('event') == 'file-loaded':
+                    self._file_loaded = True
+                    if self._pending_track is not None:
+                        log.info(f"Disc loaded — applying queued seek to track {self._pending_track}")
+                        await self._seek_track(self._pending_track)
+                elif (msg.get('event') == 'property-change'
                         and msg.get('name') == 'chapter'):
                     chapter = msg.get('data')
                     if isinstance(chapter, int) and chapter >= 0:
+                        # Chapter events only fire once the stream is loaded —
+                        # fallback in case file-loaded arrived before we connected
+                        self._file_loaded = True
                         await self._handle_track_change(chapter)
+                elif msg.get('error') not in (None, 'success'):
+                    log.warning(f"mpv command failed: {msg}")
         except asyncio.CancelledError:
             return
         except Exception as e:
@@ -500,20 +524,31 @@ class CDPlayer:
             # advances aren't suppressed afterward.
             if self._pending_track is not None:
                 self._pending_track = None
+                self._seek_retries = 0
                 log.info(f"Seek confirmed → track {new_track}")
                 if self._on_track_change:
                     await self._on_track_change()
             return
 
-        # If a seek is pending, only accept the matching track
+        # A seek is pending but mpv reports a different track — the seek was
+        # lost (e.g. sent while the disc was still loading). Re-issue it now
+        # that mpv is demonstrably playing; if it keeps failing, follow mpv so
+        # metadata never stays wrong about what's audibly playing.
         if self._pending_track is not None:
-            if new_track == self._pending_track:
+            if self._seek_retries < 3:
+                self._seek_retries += 1
+                log.warning(f"mpv on track {new_track}, expected {self._pending_track} — "
+                            f"re-seeking ({self._seek_retries}/3)")
+                await self._seek_track(self._pending_track)
+            else:
+                log.warning(f"Seek to track {self._pending_track} failed — "
+                            f"following mpv to track {new_track}")
                 self._pending_track = None
+                self._seek_retries = 0
                 self.current_track = new_track
-                log.info(f"Seek confirmed → track {new_track}")
                 if self._on_track_change:
                     await self._on_track_change()
-            return  # ignore non-matching events while seeking
+            return
 
         # Auto-advance — shuffle redirect
         if self.shuffle and self._play_order:
@@ -537,16 +572,27 @@ class CDPlayer:
             await self._on_track_change()
 
     async def _seek_track(self, track_num):
-        """Seek to a track (1-based) in the running mpv."""
+        """Seek to a track (1-based) in the running mpv.
+
+        Until the CDDA stream is loaded mpv rejects seeks, so the target is
+        queued in _pending_track and applied on the file-loaded event.
+        """
+        if track_num != self._pending_track:
+            self._seek_retries = 0
         self._pending_track = track_num
         self.current_track = track_num
+        if not self._file_loaded:
+            log.info(f"Seek to track {track_num} queued — disc still loading")
+            return
         # Use absolute-time seek with the raw TOC offset — more direct path to
         # the CDDA demuxer than set_property chapter, ensuring the read head
         # actually repositions even with --gapless-audio buffering.
         if self.track_offsets and track_num <= len(self.track_offsets):
-            await self._send_ipc({'command': ['seek', self.track_offsets[track_num - 1], 'absolute']})
+            await self._send_ipc({'command': ['seek', self.track_offsets[track_num - 1], 'absolute'],
+                                  'request_id': 100 + track_num})
         else:
-            await self._send_ipc({'command': ['set_property', 'chapter', track_num - 1]})
+            await self._send_ipc({'command': ['set_property', 'chapter', track_num - 1],
+                                  'request_id': 100 + track_num})
 
     def _next_shuffle_track(self):
         if not self._play_order:
@@ -562,10 +608,11 @@ class CDPlayer:
     # ── Public controls ──
 
     async def play_track(self, track_num):
-        """Play a specific track. Reuses running mpv when possible."""
+        """Play a specific track. Reuses running (or launching) mpv when possible."""
         self._cancel_pause_timer()
-        if self._mpv_running() and self._ipc_writer:
-            # mpv already running — just seek to the chapter
+        if self._launching or self._mpv_running():
+            # mpv running (or spawning — _seek_track queues until loaded).
+            # Killing a spawning mpv here would race the in-flight _launch_mpv.
             self.state = 'playing'
             await self._send_ipc({'command': ['set_property', 'pause', False]})
             await self._seek_track(track_num)
@@ -601,7 +648,7 @@ class CDPlayer:
             await self.play()
 
     async def next_track(self):
-        if not self._mpv_running():
+        if not (self._launching or self._mpv_running()):
             return
         if self.shuffle and self._play_order:
             nxt = self._next_shuffle_track()
@@ -616,7 +663,7 @@ class CDPlayer:
             await self._seek_track(1)
 
     async def prev_track(self):
-        if not self._mpv_running():
+        if not (self._launching or self._mpv_running()):
             return
         if self.shuffle and self._play_order:
             try:
@@ -693,6 +740,8 @@ class CDPlayer:
             self.process = None
         self.state = 'stopped'
         self._pending_track = None
+        self._file_loaded = False
+        self._seek_retries = 0
 
     async def fade_volume(self, target, duration=0.5, steps=10):
         """Smoothly fade mpv volume to target (0-100) over duration seconds."""

@@ -16,9 +16,15 @@
     <meta name="theme-color" content="#000000">
     <link rel="stylesheet" href="splash.css">
     <script src="../assets/qrcode.min.js"></script>
+    <script src="../js/demo-backend.js"></script>
 
     <script>
-        if (/Mac/.test(navigator.userAgent) && /^(localhost|127\.0\.0\.1)$/.test(location.hostname))
+        // Dev/demo mode: a static server with no beo-* services behind it.
+        // A device serves this page from beo-http over http on port 80 — note
+        // the protocol, https also reports an empty port and would otherwise
+        // look like a device (which left this page's cards dead on the site).
+        window.BEO_DEV_MODE = !(location.protocol === 'http:' && /^(80|)$/.test(location.port));
+        if (window.BEO_DEV_MODE)
             document.write('<script src="system-mocks.js"><\/script>');
     </script>
 
@@ -967,9 +973,13 @@
     </div>
 
     <script>
-        // API base — works from both the device's own Chromium (localhost)
-        // and external browsers (uses actual device hostname)
-        const API = 'http://' + location.hostname + ':8767';
+        // API base — empty means same-origin: this page is served by beo-http,
+        // which proxies /update/* through to beo-input. Same-origin matters:
+        // POST /update/run rejects cross-site callers (request_origin_ok in
+        // services/input.py), and a proxied call is never cross-site.
+        // Dev mode (plain static server, no proxy) keeps the explicit port so
+        // system-mocks.js can intercept it.
+        const API = window.BEO_DEV_MODE ? 'http://' + location.hostname + ':8767' : '';
 
         // ── History buffer for sparkline charts ──
         const HISTORY = { cpu_temp: [], memory: [] };

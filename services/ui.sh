@@ -27,11 +27,14 @@ if [ -f "$SPLASH_IMAGE" ] && command -v fbi &>/dev/null && ! pidof plymouthd &>/
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Splash screen displayed (fbi fallback)"
 fi
 
-# Chromium profile — kept on SD so cookies and login state survive reboots.
+# Chromium profile. On a standard install sd-hardening symlinks this to
+# tmpfs, so cookies and login state are wiped on every reboot — the kiosk
+# doesn't need them. It only lives on the SD card if sd-hardening was
+# skipped.
 CHROMIUM_DATA_DIR="$HOME/.config/chromium"
 export CHROMIUM_DATA_DIR  # Export for xinit subshell
-# If the profile dir is a symlink (e.g. sd-hardening points it to tmpfs),
-# recreate the symlink target on each boot — tmpfs is wiped on power cycle.
+# If the profile dir is a symlink (sd-hardening → tmpfs), recreate the
+# symlink target on each boot — tmpfs is wiped on power cycle.
 if [ -L "$CHROMIUM_DATA_DIR" ]; then
   mkdir -p "$(readlink "$CHROMIUM_DATA_DIR")/Default"
 else

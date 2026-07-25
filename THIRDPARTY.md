@@ -30,6 +30,22 @@ publish the same facts libpc2 tabulates in `masterlink/telegram.hpp` and
 The soft-arc geometry in `web/js/arcs.js` is derived from Beolyd5's arc
 rendering. Inline comment in that file points at the upstream source.
 
+## Music Assistant (Apple Music developer token)
+
+- **Upstream**: <https://github.com/music-assistant/server>
+- **License**: Apache 2.0
+- **Compatibility**: Apache 2.0 is compatible with GPL-3.0-or-later.
+
+`services/sources/apple_music/apple_music_auth.py` ships the same pre-built
+Apple Music *developer* token that Music Assistant bundles in its published
+package. It authorises catalogue metadata lookups only; playback and library
+access use the listener's own Apple Music account, obtained through MusicKit JS
+in the browser. The token carries an expiry (`exp`) and the service checks it at
+startup, because an expired developer token 401s every request in a way that
+looks exactly like user-token revocation. Set `APPLE_MUSIC_DEV_TOKEN` in
+`/etc/beosound5c/secrets.env` to supply a fresh token without waiting for a
+release.
+
 ## B&O MLGW02 specification
 
 - **Source**: "MLGW Protocol specification, MLGW02, rev 3, 12-Nov-2014"

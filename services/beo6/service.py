@@ -90,9 +90,26 @@ class _LRUMap(dict):
         super().__setitem__(key, value)
 
 
+# Typographic punctuation → ASCII for the Beo6's 2005-era renderer:
+# metadata sources use curly quotes (Knockin’), en/em dashes, ellipses —
+# glyphs the remote can't display. Letters (å, é, …) render fine.
+_BEO6_TRANSLIT = str.maketrans({
+    '‘': "'", '’': "'", '‚': "'", 'ʼ': "'",
+    '“': '"', '”': '"', '„': '"',
+    '–': '-', '—': '-', '−': '-',
+    '…': '...', ' ': ' ',
+})
+
+
 def _esc(text):
-    """Escape text for XML attribute/content."""
-    return html.escape(str(text), quote=True)
+    """Escape text for XML attribute/content.
+
+    Escapes & < > and double quotes only. html.escape(quote=True) would
+    turn apostrophes into &#x27;, which the Beo6's XML parser doesn't
+    decode (renders literally) — a bare ' is valid XML inside
+    double-quoted attributes, so leave it alone.
+    """
+    return html.escape(str(text).translate(_BEO6_TRANSLIT), quote=False).replace('"', '&quot;')
 
 
 class BeoNetSession:
@@ -1667,8 +1684,10 @@ class Beo6Service:
 
         try:
             # Resolve relative paths (e.g. CD artwork: assets/cd-cache/xxx.jpg)
+            # against beo-http, which serves the web root on port 80 on
+            # devices (see services/system/beo-http.service)
             if url and not url.startswith(('http://', 'https://', 'base64:')):
-                url = f"http://localhost:8000/{url}"
+                url = f"http://localhost/{url}"
 
             # Handle base64-encoded artwork (from synthetic tracks)
             if url.startswith('base64:'):

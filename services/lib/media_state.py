@@ -29,6 +29,9 @@ class MediaState:
     def __init__(self):
         self._state: dict | None = None
         self._ws_clients: set[web.WebSocketResponse] = set()
+        # Per-source high-water mark of accepted _action_ts — orders posts
+        # from concurrent handlers within one source (see validate_update)
+        self._source_media_ts: dict[str, float] = {}
 
     # ── Public state access ──
 
@@ -169,6 +172,28 @@ class MediaState:
                 title=title,
             )
             return {"status": "ok", "dropped": True, "reason": "inactive_source"}
+
+        # Per-source ordering guard: concurrent handlers in one source can
+        # complete out of order (e.g. a slow artwork fetch on skip #1 landing
+        # after skip #2 already posted). A post carrying a *strictly older*
+        # action_ts than the source's high-water mark is stale — accepting it
+        # would overwrite fresher metadata. Equal ts is fine: follow-up posts
+        # (canvas fetch, auto-advance, state flips) reuse the action's ts.
+        if source_id and action_ts:
+            last_ts = self._source_media_ts.get(source_id, 0)
+            if action_ts < last_ts:
+                self._trace(
+                    decision="drop",
+                    drop_reason="stale_action_ts",
+                    source_id=source_id,
+                    active=active_source_id,
+                    action_ts=action_ts,
+                    latest_ts=last_ts,
+                    update_reason=reason,
+                    title=title,
+                )
+                return {"status": "ok", "dropped": True, "reason": "stale_action_ts"}
+            self._source_media_ts[source_id] = action_ts
 
         self._trace(
             decision="accept",

@@ -52,11 +52,12 @@ const AppConfig = {
         media: 'ws://localhost:8770/router/ws'
     },
 
-    // Camera overlay configuration
-    cameras: [
-        { id: 'door', title: 'Front door', entity: 'camera.front_door' },
-        { id: 'gate', title: 'Gate', entity: 'camera.gate' }
-    ],
+    // Camera overlay: set a "cameras" array in config.json to enable it.
+    // Empty by default on purpose — entity ids only mean something in one
+    // Home Assistant install, so a shipped default would put tiles on every
+    // device pointing at cameras that don't exist. The browser emulator gets
+    // its own set from the demo config.
+    cameras: [],
 
     // Debug settings
     debug: {
@@ -80,10 +81,23 @@ const AppConfig = {
         if (config.home_assistant) {
             if (config.home_assistant.url) AppConfig.homeAssistant.url = config.home_assistant.url;
         }
+        if (Array.isArray(config.cameras) && config.cameras.length) {
+            AppConfig.cameras = config.cameras;
+        }
     }
 
-    // Try deployed config first, then dev fallback
-    var paths = ['/json/config.json', '/config/default.json'];
+    // Try the deployed config first, then the repo default.
+    //
+    // Relative, not absolute: the documented dev command serves web/ as the
+    // document root (`cd web && python3 -m http.server`), where /config/ does
+    // not exist — absolute paths made both reads 404 and left the UI on its
+    // built-in defaults. Softarc pages live one level down, hence the ../.
+    var up = location.pathname.indexOf('/softarc/') !== -1 ? '../' : '';
+    var paths = [
+        up + 'json/config.json',        // deployed device config
+        up + 'json/demo/config.json',   // browser emulator / local dev
+        up + '../config/default.json',  // repo checkout served from the root
+    ];
     var loaded = false;
     for (var i = 0; i < paths.length && !loaded; i++) {
         try {
@@ -108,6 +122,38 @@ const AppConfig = {
     if (urlParams.get('demo') === 'true') {
         AppConfig.demo.enabled = true;
         console.log('[CONFIG] Demo mode enabled via URL parameter');
+        return;
+    }
+    if (urlParams.get('demo') === 'false') return;   // escape hatch
+
+    // No beo-* services behind this page? Then it is a dev server or the
+    // website emulator, and the UI should show bundled demo content rather
+    // than an empty four-item arc. A device serves the UI from beo-http on
+    // port 80, so anything else is a static server.
+    //
+    // Softarc pages inherit this via the same check — they load config.js too.
+    // A device serves the UI over plain HTTP on port 80. The protocol check
+    // matters as much as the port: on https the port is empty too, so keying
+    // on the port alone made the public emulator look like a device, and every
+    // source view then tried to reach a service on localhost.
+    const port = location.port;
+    const servedByDevice = location.protocol === 'http:' && (port === '' || port === '80');
+    if (!servedByDevice && location.protocol !== 'file:') {
+        AppConfig.demo.enabled = true;
+        console.log(`[CONFIG] Demo mode enabled (${location.protocol}//${location.host})`);
+        return;
+    }
+
+    // Child frames (softarc pages) inherit from the shell that embedded them.
+    // Belt and braces: the shell may have been opened with ?demo=true, which
+    // its iframes don't carry.
+    try {
+        if (window.parent !== window && window.parent.AppConfig?.demo?.enabled) {
+            AppConfig.demo.enabled = true;
+            console.log('[CONFIG] Demo mode inherited from parent frame');
+        }
+    } catch (e) {
+        /* cross-origin parent — nothing to inherit */
     }
 })();
 

@@ -67,6 +67,8 @@ class RemotePlayer:
     async def play_track(self, index):
         if index < 0 or index >= self.total_tracks:
             return False
+        prev_track = self.current_track
+        prev_expected = self._expected_url
         self.current_track = index
         self._cancel_pause_timer()
         self._stop_pause_monitor()
@@ -106,6 +108,14 @@ class RemotePlayer:
             await self._prefetch_next(index)
             log.info("Remote playing [%d/%d] %s", index + 1, self.total_tracks,
                      track.get('title', '?'))
+        else:
+            # The player refused — the previous track (if any) is still what's
+            # actually playing. Reverting keeps the old poll's takeover check
+            # comparing against the right URL instead of declaring "external
+            # takeover" ~6s later and dropping the source to idle mid-song.
+            log.error("Remote play failed for track %d — keeping previous state", index + 1)
+            self.current_track = prev_track
+            self._expected_url = prev_expected
         return ok
 
     async def _prefetch_next(self, current_index):

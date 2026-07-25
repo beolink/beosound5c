@@ -107,6 +107,10 @@ class TidalService(DigitPlaylistMixin, SourceBase):
         self._source_managed = False
         self._current_playlist = None  # full playlist dict with tracks
         self._current_index = 0
+        self._play_lock = asyncio.Lock()   # serializes track starts (no interleaved skips)
+        self._expected_stream_url = None   # URL the player confirmed it started
+        self._track_started_at = 0.0       # monotonic time of last confirmed start
+        self._pending_stop_polls = 0       # consecutive 'stopped' poll observations
 
     async def on_start(self):
         # auth.load() may perform a blocking token refresh + profile fetch
@@ -221,7 +225,10 @@ class TidalService(DigitPlaylistMixin, SourceBase):
         else:
             # ShareLink mode: check if player still has TIDAL content
             track_uri = await self.player_track_uri()
-            if track_uri and "tidal" in track_uri.lower():
+            # Sonos reports TIDAL content as x-sonos-http:…?sid=174 — no
+            # "tidal" substring, so match the service id as well
+            if track_uri and ("tidal" in track_uri.lower()
+                              or "sid=174" in track_uri):
                 log.info("Activate: player has TIDAL content, resuming")
                 await self.player_resume()
                 self.state = "playing"
@@ -349,7 +356,15 @@ class TidalService(DigitPlaylistMixin, SourceBase):
             log.error("Player service failed to start playlist")
 
     async def _play_current_track(self):
-        """Play the track at _current_index in _current_playlist (source-managed)."""
+        """Play the track at _current_index in _current_playlist (source-managed).
+
+        Serialized by _play_lock so rapid skips can't interleave, and the
+        optimistic pre-broadcast is reverted if the player refuses the track —
+        belief must always converge to what the player actually plays."""
+        async with self._play_lock:
+            await self._play_current_locked()
+
+    async def _play_current_locked(self):
         if not self._current_playlist:
             return
 
@@ -367,10 +382,12 @@ class TidalService(DigitPlaylistMixin, SourceBase):
                         track.get('name', '?'))
             if self._current_index + 1 < len(tracks):
                 self._current_index += 1
-                await self._play_current_track()
+                await self._play_current_locked()
             return
 
-        # Pre-broadcast metadata for instant PLAYING view update
+        prev_np = self.now_playing
+        # Pre-broadcast metadata for instant PLAYING view update (optimistic —
+        # reverted below if the play command fails)
         await self.post_media_update(
             title=track.get("name", ""),
             artist=track.get("artist", ""),
@@ -392,10 +409,29 @@ class TidalService(DigitPlaylistMixin, SourceBase):
                 'index': self._current_index,
                 'total': len(tracks),
             }
+            self._expected_stream_url = url
+            self._track_started_at = time.monotonic()
+            self._pending_stop_polls = 0
             await self.register("playing", auto_power=True)
             self._start_polling()
         else:
-            log.error("Player service failed to start track")
+            log.error("Player failed to start '%s' — reverting optimistic state",
+                      track.get('name', '?'))
+            await self._revert_failed_play(prev_np)
+
+    async def _revert_failed_play(self, prev_np):
+        """A play command failed — the player still plays whatever it played
+        before (or nothing). Converge belief and UI back to that reality."""
+        if prev_np is not None and await self.reassert_player_media():
+            # Previous track still playing — restore belief incl. queue index
+            self.now_playing = prev_np
+            idx = prev_np.get('index')
+            if idx is not None:
+                self._current_index = idx
+        else:
+            self.state = "stopped"
+            self.now_playing = None
+            await self.register("available")
 
     async def _play_track(self, url):
         """Play a specific track by TIDAL URL (ShareLink path)."""
@@ -407,6 +443,11 @@ class TidalService(DigitPlaylistMixin, SourceBase):
             self._current_index = 0
             await self.register("playing", auto_power=True)
             self._start_polling()
+        else:
+            # The pre-broadcast (if any) is now wrong — show what the player
+            # actually plays instead of leaving stale optimistic metadata
+            log.error("Player failed to start TIDAL track %s", url)
+            await self._revert_failed_play(self.now_playing)
 
     async def _toggle(self):
         if self.state == "playing":
@@ -460,6 +501,8 @@ class TidalService(DigitPlaylistMixin, SourceBase):
         self.now_playing = None
         self._current_playlist = None
         self._current_index = 0
+        self._expected_stream_url = None
+        self._pending_stop_polls = 0
         self._stop_polling()
         await self.register("available")
 
@@ -608,20 +651,31 @@ class TidalService(DigitPlaylistMixin, SourceBase):
     async def _poll_now_playing(self):
         try:
             state = await self.player_state()
-            if state == "playing" and self.state != "playing":
-                self.state = "playing"
-                await self.register("playing")
-            elif state == "stopped" and self.state == "playing":
-                # Track finished — auto-advance if source-managed
-                if self._source_managed and self._current_playlist:
-                    tracks = self._current_playlist.get('tracks', [])
-                    if self._current_index + 1 < len(tracks):
-                        log.info("Track finished, advancing to next")
-                        self._current_index += 1
-                        await self._play_current_track()
+            if state == "playing":
+                self._pending_stop_polls = 0
+                # Identity check: is the player still playing OUR stream?
+                # Grace period after each start (player may briefly report the
+                # previous URI), and substring match (players may wrap the URL
+                # in a scheme prefix). Empty URI = player can't say — skip.
+                if (self._source_managed and self._expected_stream_url
+                        and self.state == "playing"
+                        and time.monotonic() - self._track_started_at > 10):
+                    uri = await self.player_track_uri()
+                    if uri and (self._expected_stream_url not in uri
+                                and uri not in self._expected_stream_url):
+                        log.info("Player is playing other content — deactivating "
+                                 "(uri=%.60s)", uri)
+                        self.state = "stopped"
+                        self.now_playing = None
+                        await self.register("available")
                         return
-                    else:
-                        log.info("Playlist finished")
+                if self.state != "playing":
+                    self.state = "playing"
+                    await self.register("playing")
+            elif state == "stopped" and self.state == "playing":
+                if self._source_managed and self._current_playlist:
+                    await self._handle_playback_stopped()
+                    return
                 self.state = "stopped"
                 self.now_playing = None
                 await self.register("available")
@@ -630,6 +684,41 @@ class TidalService(DigitPlaylistMixin, SourceBase):
                 await self.register("paused")
         except Exception as e:
             log.warning("Player state poll error: %s", e)
+
+    async def _handle_playback_stopped(self):
+        """Playing → stopped in source-managed mode. Distinguish 'track
+        finished' (advance) from 'stream died' / 'stopped externally'
+        (deactivate) instead of blindly advancing."""
+        # Debounce: require two consecutive stopped polls. An external stop
+        # fires a router playback-override that deactivates this source within
+        # ~1s — advancing on the first poll would resurrect playback the user
+        # just stopped.
+        self._pending_stop_polls += 1
+        if self._pending_stop_polls < 2:
+            return
+        self._pending_stop_polls = 0
+
+        played = time.monotonic() - self._track_started_at
+        if played < 10:
+            # Died almost immediately — dead stream URL, not a finished track.
+            # Advancing would cascade through the whole playlist.
+            log.warning("Track stopped after %.1fs — failed stream, not advancing",
+                        played)
+            self.state = "stopped"
+            self.now_playing = None
+            await self.register("available")
+            return
+
+        tracks = self._current_playlist.get('tracks', [])
+        if self._current_index + 1 < len(tracks):
+            log.info("Track finished, advancing to next")
+            self._current_index += 1
+            await self._play_current_track()
+        else:
+            log.info("Playlist finished")
+            self.state = "stopped"
+            self.now_playing = None
+            await self.register("available")
 
     # -- Extra routes --
 
