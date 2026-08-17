@@ -407,6 +407,18 @@ function routeButtonToView(page, button, uiStore) {
 
     // Playing page — active source owns buttons
     if (page === 'menu/playing') {
+        // ...except in the browser emulator, where the embedding page owns
+        // playback. It has to come first: with an active source the branch
+        // below posts to the router, which does not exist there, and returns
+        // true regardless — so LEFT/RIGHT/GO were swallowed silently.
+        if (window.EmulatorBridge?.isInEmulator) {
+            const emulatorAction = { left: 'prev_track', right: 'next_track', go: 'toggle_playback' }[button];
+            if (emulatorAction) {
+                window.EmulatorBridge.notifyPlaybackControl(emulatorAction);
+                return true;
+            }
+        }
+
         if (uiStore.activeSource) {
             const ctrl = window.SourcePresets?.[uiStore.activeSource]?.controller;
             if (ctrl?.isActive && ctrl.handleButton && ctrl.handleButton(button)) return true;
@@ -422,10 +434,6 @@ function routeButtonToView(page, button, uiStore) {
         if (playerAction) {
             sendToPlayer(playerAction);
             return true;
-        }
-        if (window.EmulatorBridge?.isInEmulator) {
-            const action = { left: 'prev_track', right: 'next_track', go: 'toggle_playback' }[button];
-            if (action) { window.EmulatorBridge.notifyPlaybackControl(action); return true; }
         }
         return false; // no handler — fall through to webhook
     }

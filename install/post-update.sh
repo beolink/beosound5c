@@ -75,6 +75,9 @@ $SERVICE_USER ALL=(ALL) NOPASSWD: /bin/systemctl stop beo-*
 $SERVICE_USER ALL=(ALL) NOPASSWD: /bin/systemctl start beo-*
 $SERVICE_USER ALL=(ALL) NOPASSWD: $POST_UPDATE_PATH
 $SERVICE_USER ALL=(ALL) NOPASSWD: /bin/bash $BASE_DIR/services/system/reconcile-services.sh
+# USB source: mount/release external music drives (BM5 + auto-detected)
+$SERVICE_USER ALL=(ALL) NOPASSWD: /usr/bin/mount, /usr/bin/umount
+$SERVICE_USER ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /media/beo-usb/*, /usr/bin/mkdir -p /mnt/beo-usb-auto, /usr/bin/rmdir /media/beo-usb/*
 EOF
 
 visudo -c -f "$SUDOERS_TMP"

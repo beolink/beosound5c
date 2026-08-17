@@ -110,6 +110,19 @@
     const DURATION_MS = 214_000;
 
     function mediaPayload() {
+        if (externalMedia) {
+            // Shape the shell's track like a player media update.
+            return {
+                title: externalMedia.title,
+                artist: externalMedia.artist,
+                album: externalMedia.album,
+                artwork: externalMedia.artwork,
+                artwork_url: externalMedia.artwork,
+                playback_state: 'playing',
+                state: 'playing',
+                source: 'spotify',
+            };
+        }
         const t = TRACKS[trackIndex % TRACKS.length];
         const fmt = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
         return {
@@ -326,13 +339,36 @@
         if (positionMs >= DURATION_MS) {
             positionMs = 0;
             trackIndex++;
-            pushMedia();
+            if (!parentDrivesMedia) pushMedia();
         }
     }, 1000);
 
-    // First push once the UI is up; the parent emulator may override it with
-    // its own track via postMessage, which is fine — last writer wins.
-    document.addEventListener('DOMContentLoaded', () => setTimeout(pushMedia, 600));
+    // Only drive playback when nothing else is. Inside the website emulator the
+    // shell pushes real tracks via postMessage, and both writing to the same
+    // place is a race — this file pushed 100ms after the shell and won, so the
+    // device showed a placeholder instead of the album the shell had queued.
+    //
+    // Being embedded at all is the test. Sniffing for a global in the parent
+    // does not work: the shell declares its controller with `const`, and
+    // top-level `const` is not a property of `window`, so the check silently
+    // read undefined and this file kept clobbering the shell.
+    const parentDrivesMedia = window.parent !== window;
+
+    // Remember what the shell last pushed, so a later read of /router/media
+    // (view mounts do this) answers with that rather than our placeholder.
+    let externalMedia = null;
+    if (parentDrivesMedia) {
+        window.addEventListener('message', (event) => {
+            const d = event.data;
+            if (d && d.type === 'mock_track' && d.data) externalMedia = d.data;
+        });
+    }
+
+    if (!parentDrivesMedia) {
+        document.addEventListener('DOMContentLoaded', () => setTimeout(pushMedia, 600));
+    } else {
+        console.log('[DEMO] Parent frame drives playback — not pushing our own media');
+    }
 
     window.DemoBackend = { MENU, TRACKS, mediaPayload, artwork };
     console.log('[DEMO] Backend active — menu, media and browse data are mocked');

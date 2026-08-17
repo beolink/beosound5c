@@ -136,7 +136,6 @@ class SpotifyService(DigitPlaylistMixin, SourceBase):
         self._fetching_playlists = False  # True while initial fetch is running
         self._last_playlist_id = None  # last playlist we queued on the player
         self._last_track_uri = None   # last Spotify track URI seen on player
-        self._track_advanced_at = -10.0 # monotonic time of last _advance_track_uri call
         self._track_gen = 0           # incremented on every track change; background tasks abort if stale
         self._last_play_time = 0      # monotonic time of last play command (debounce)
         self._last_refresh = 0  # monotonic timestamp of last completed refresh
@@ -421,34 +420,6 @@ class SpotifyService(DigitPlaylistMixin, SourceBase):
                         return i
                 break
         return 0
-
-    def _advance_track_uri(self, direction: int):
-        """Update _last_track_uri by moving direction (+1/-1) in the playlist.
-
-        Called immediately on next/prev so the position is tracked locally
-        without waiting for a player poll (which may lag behind)."""
-        if not self._last_playlist_id or not self._last_track_uri:
-            return
-        for pl in self.playlists:
-            if pl.get('id') == self._last_playlist_id:
-                tracks = pl.get('tracks', [])
-                if not tracks:
-                    return
-                for i, track in enumerate(tracks):
-                    if track.get('uri') == self._last_track_uri:
-                        new_idx = i + direction
-                        if 0 <= new_idx < len(tracks):
-                            self._last_track_uri = tracks[new_idx].get('uri')
-                        else:
-                            # Beyond our local cache — clear so we don't
-                            # broadcast stale metadata; the player's event
-                            # will provide the correct track info.
-                            self._last_track_uri = None
-                        self._track_advanced_at = time.monotonic()
-                        self._track_gen += 1
-                        self._save_last_played()
-                        return
-                break
 
     def _lookup_track_meta(self, track_uri):
         """Return the cached track dict for a URI, or None."""
@@ -799,21 +770,42 @@ class SpotifyService(DigitPlaylistMixin, SourceBase):
 
     async def _next(self):
         if await self.player_next():
-            self._advance_track_uri(1)
-            await self._broadcast_current_track()
-            await asyncio.sleep(0.5)
-            await self._poll_now_playing()
+            await self._confirm_track_advance()
         else:
             log.warning("player_next() failed — command dropped")
 
     async def _prev(self):
         if await self.player_prev():
-            self._advance_track_uri(-1)
-            await self._broadcast_current_track()
-            await asyncio.sleep(0.5)
-            await self._poll_now_playing()
+            await self._confirm_track_advance()
         else:
             log.warning("player_prev() failed — command dropped")
+
+    async def _confirm_track_advance(self):
+        """Adopt the track the player actually moved to after a skip.
+
+        We deliberately don't guess it from playlist order: with shuffle on
+        the player's next track bears no relation to the playlist, so a
+        guessed pre-broadcast showed the wrong title/artist/artwork for the
+        few hundred ms until the player's own track_change corrected it.
+        The player broadcasts the real track within ~150ms of the skip, so
+        the only job left here is keeping _last_track_uri in step for
+        resume-from-position.
+        """
+        previous = self._last_track_uri
+        for _ in range(8):
+            await asyncio.sleep(0.15)
+            uri = await self.player_track_uri()
+            if uri and uri.startswith("spotify:") and uri != previous:
+                self._last_track_uri = uri
+                self._track_gen += 1
+                self._save_last_played()
+                break
+        else:
+            # Player never reported a different track (e.g. PREV restarting
+            # the current one, or a slow queue). _poll_now_playing() below
+            # adopts whatever it does report.
+            log.debug("Skip not confirmed by player — falling back to poll")
+        await self._poll_now_playing()
 
     async def _stop(self):
         await self.player_stop()
@@ -1007,19 +999,12 @@ class SpotifyService(DigitPlaylistMixin, SourceBase):
                 uri = await self.player_track_uri()
                 if uri and uri.startswith("spotify:"):
                     if uri != self._last_track_uri:
-                        # Ignore stale player reports right after a local
-                        # next/prev advance — the player hasn't caught up yet
-                        grace = time.monotonic() - self._track_advanced_at < 5.0
-                        if grace:
-                            log.debug("Poll ignoring stale player URI %s (advanced to %s %.1fs ago)",
-                                      uri, self._last_track_uri,
-                                      time.monotonic() - self._track_advanced_at)
-                        else:
-                            # Genuine auto-advance at end of song
-                            self._last_track_uri = uri
-                            self._track_gen += 1
-                            self._save_last_played()
-                            await self._broadcast_current_track()
+                        # Auto-advance at end of song, or a skip the confirm
+                        # loop didn't see land. The player is the authority.
+                        self._last_track_uri = uri
+                        self._track_gen += 1
+                        self._save_last_played()
+                        await self._broadcast_current_track()
                 if self.state != "playing":
                     self.state = "playing"
                     await self.register("playing")

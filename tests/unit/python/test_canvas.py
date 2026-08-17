@@ -215,7 +215,6 @@ class TestSpotifyCanvasBroadcast:
                     svc = SpotifyService.__new__(SpotifyService)
                     svc.id = "spotify"
                     svc._last_track_uri = None
-                    svc._track_advanced_at = -10.0
                     svc._track_gen = 0
                     svc._last_playlist_id = None
                     svc._last_media = None
@@ -325,10 +324,8 @@ class TestSpotifyCanvasBroadcast:
         call_kwargs = svc.post_media_update.call_args.kwargs
         assert call_kwargs["title"] == "Live Title"
 
-    @pytest.mark.asyncio
-    async def test_next_then_poll_does_not_revert_to_old_track(self):
-        """When user hits next, _poll_now_playing must not revert _last_track_uri
-        if the player still reports the old track due to transition latency."""
+    def _build_skip_service(self):
+        """Service positioned on 'zombie' in a two-track playlist."""
         svc = self._build_service()
         svc.state = "playing"
         svc._last_track_uri = "spotify:track:zombie"
@@ -341,21 +338,38 @@ class TestSpotifyCanvasBroadcast:
         ]}]
         svc._canvas.get_cached.return_value = None
         svc._canvas.configured = False  # disable background canvas fetch
-
-        # Simulate: _next advances locally, then poll sees old track from player
+        svc._save_last_played = MagicMock()
         svc.player_next = AsyncMock(return_value=True)
         svc.player_state = AsyncMock(return_value="playing")
-        # Player still reports zombie (transition lag)
-        svc.player_track_uri = AsyncMock(return_value="spotify:track:zombie")
         svc.register = AsyncMock()
+        return svc
+
+    @pytest.mark.asyncio
+    async def test_next_adopts_the_track_the_player_moved_to(self):
+        """A skip adopts whatever the player reports, not the playlist-order
+        neighbour. With shuffle on the two differ, and the player is right."""
+        svc = self._build_skip_service()
+        # Player shuffles to a track that is NOT the next one in playlist order.
+        svc.player_track_uri = AsyncMock(return_value="spotify:track:shuffled")
 
         await svc._next()
 
-        # _last_track_uri must be semester, NOT reverted to zombie
-        assert svc._last_track_uri == "spotify:track:semester"
-        # The last broadcast must be for Semester, not Zombie
-        last_call = svc.post_media_update.call_args
-        assert last_call.kwargs["title"] == "Semester"
+        assert svc._last_track_uri == "spotify:track:shuffled"
+
+    @pytest.mark.asyncio
+    async def test_next_does_not_guess_when_player_never_advances(self):
+        """If the player never reports a different track, the source must not
+        invent one — it used to jump to the playlist neighbour and drift."""
+        svc = self._build_skip_service()
+        # Player stays on the old track for the whole confirm window.
+        svc.player_track_uri = AsyncMock(return_value="spotify:track:zombie")
+
+        await svc._next()
+
+        assert svc._last_track_uri == "spotify:track:zombie"
+        # And it must not have broadcast a guessed "Semester" from playlist order.
+        titles = [c.kwargs.get("title") for c in svc.post_media_update.call_args_list]
+        assert "Semester" not in titles
 
     @pytest.mark.asyncio
     async def test_next_then_poll_accepts_confirmed_new_track(self):

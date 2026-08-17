@@ -835,6 +835,17 @@ class Beo6Service:
                                     pass
                             else:
                                 image_ref = self.artwork_url
+                        # Catalog match — same as _handle_media_update, so a
+                        # live (non-catalog) track surfaces in last-played
+                        # queries right from boot, not only after a change
+                        track_id = self._find_track_id(self.title, self.artist)
+                        if track_id is not None:
+                            for i, t in enumerate(self._all_tracks):
+                                if t['id'] == track_id:
+                                    self._queue_start_idx = i
+                                    break
+                        else:
+                            self._queue_start_idx = -1
                         self.pq_revision += 1
                         self.queue_id = str(self.pq_revision)
                         # Query router for absolute current_index
@@ -1215,6 +1226,39 @@ class Beo6Service:
         elif order_by == 'name' or order_by == 'title':
             tracks.sort(key=lambda t: t['title'].lower(),
                         reverse=(order_sort == 'desc'))
+
+        # The now-playing track must top the last-played list: on a real BM5
+        # the current track is by definition the most-recently-played item,
+        # and the Beo6 takes its now-playing cover from the top of this
+        # list. Without this, the previous Spotify track's artwork stays up
+        # when playing CD/radio/anything not started from the catalog.
+        if (order_by == 'last-played-time' and not filters
+                and self._now_playing):
+            if 0 <= self._queue_start_idx < len(self._all_tracks):
+                # Catalog-matched (e.g. CD track also in the Spotify library):
+                # its stored last-played is Spotify's stale value — hoist it.
+                matched = self._all_tracks[self._queue_start_idx]
+                try:
+                    tracks.remove(matched)
+                except ValueError:
+                    pass
+                tracks.insert(0, matched)
+            else:
+                # Live track outside the catalog — synthesize a top entry
+                # carrying the real (router) metadata and artwork.
+                now = self._now_playing
+                tracks.insert(0, {
+                    'id': -1,  # sentinel — play_track() ignores unknown ids
+                    'title': now.get('title', ''),
+                    'artist': now.get('artist', ''),
+                    'album_title': now.get('album_title', ''),
+                    'album_id': -1,
+                    'image': now.get('image', ''),
+                    'last_played': 2**62,
+                    'added_time': 0,
+                    'play_count': 1,
+                    'index': 0,
+                })
 
         # Calculate seed offset
         seed_offset = 0

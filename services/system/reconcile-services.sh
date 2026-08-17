@@ -36,6 +36,24 @@ fi
 REQUIRED_FAILED=()
 OPTIONAL_FAILED=()
 
+# --- Sync Spotify Connect name with the configured device name -----------
+# The Spotify Connect name IS the device name the user set. Runs before the
+# service restarts below so beo-librespot comes back up with the new name.
+LIBRESPOT_YML="/etc/beosound5c/librespot/config.yml"
+if [ -f "$LIBRESPOT_YML" ]; then
+    python3 - "$CONFIG_FILE" "$LIBRESPOT_YML" <<'PYEOF' || echo "⚠️  Could not sync Spotify Connect name"
+import json, re, sys
+cfg_path, yml_path = sys.argv[1], sys.argv[2]
+name = (json.load(open(cfg_path)).get("device") or "").strip() or "BeoSound 5c"
+quoted = '"' + name.replace("\\", "\\\\").replace('"', '\\"') + '"'
+text = open(yml_path).read()
+new = re.sub(r"(?m)^device_name:.*$", f"device_name: {quoted}", text)
+if new != text:
+    open(yml_path, "w").write(new)
+    print(f"ℹ️  Spotify Connect name -> {name}")
+PYEOF
+fi
+
 # --- Determine desired player set ----------------------------------------
 PLAYER_TYPE=$(python3 -c "import json;print(json.load(open('$CONFIG_FILE')).get('player',{}).get('type','sonos'))" 2>/dev/null || echo "sonos")
 echo "ℹ️  Configured player type: $PLAYER_TYPE"

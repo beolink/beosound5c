@@ -5,6 +5,13 @@
  * Users can navigate with arrow keys, and items are positioned in an arc formation.
  * The center item is highlighted and larger, with items fading and blurring towards the edges.
  */
+
+// Music-service views that browse playlists and play a selection. They all
+// report GO to the website emulator the same way; the emulator shell resolves
+// the playlist by id against its own demo pool, which is the union of these
+// services' playlists.
+const MUSIC_SERVICE_CONTEXTS = ['spotify', 'apple_music', 'tidal', 'plex'];
+
 class ArcList {
     constructor(config = {}) {
         // ===== CONFIGURATION PARAMETERS =====
@@ -2253,7 +2260,7 @@ class ArcList {
 
         if (this.config.context === 'scenes') {
             window.EmulatorBridge.notifySceneActivated(id, itemName);
-        } else if (this.config.context === 'spotify') {
+        } else if (MUSIC_SERVICE_CONTEXTS.includes(this.config.context)) {
             if (this.viewMode === 'parent' || this.viewMode === 'single') {
                 window.EmulatorBridge.notifyPlaylistSelected(
                     this.parentData[this.currentIndex]?.id,

@@ -59,11 +59,13 @@ install_librespot() {
     mkdir -p "$LIBRESPOT_CONFIG_DIR"
 
     if [ ! -f "$LIBRESPOT_CONFIG_DIR/config.yml" ]; then
+        # Spotify Connect name IS the configured device name — reconcile-services.sh
+        # keeps it in sync when the user renames the device later.
         local DEVICE_NAME="BeoSound 5c"
         if [ -f "$CONFIG_FILE" ]; then
             local CFG_NAME
             CFG_NAME=$(python3 -c "import json;print(json.load(open('$CONFIG_FILE')).get('device',''))" 2>/dev/null)
-            [ -n "$CFG_NAME" ] && DEVICE_NAME="BeoSound 5c $CFG_NAME"
+            [ -n "$CFG_NAME" ] && DEVICE_NAME="$CFG_NAME"
         fi
 
         log_info "Creating go-librespot config (device: $DEVICE_NAME)..."

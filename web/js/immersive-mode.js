@@ -308,6 +308,13 @@
         const uiStore = window.uiStore;
         if (!uiStore) { setTimeout(init, 200); return; }
 
+        // Demo mode never enters immersive on its own. On a device, arriving at
+        // a playing view and getting full-bleed artwork is the point; in the
+        // browser emulator it means a visitor's first sight of the UI is an
+        // album cover with the arc hidden. The idle timer and laser tracking
+        // still work, so immersive is a few seconds or one scroll away.
+        const eagerEntryAllowed = !window.AppConfig?.demo?.enabled;
+
         // 1. Menu visibility: exit immersive when menu reappears.
         // Menu always wins — if laser happens to be in the tracking zone
         // when the menu is unhidden, force isTracking=false so the large
@@ -348,7 +355,7 @@
                         syncOverlayText(false);
                         applyProgress(progress);
                     }, 100);
-                } else if (eagerEntryArmed || (!wasPlaying && isPlaying())) {
+                } else if (eagerEntryAllowed && (eagerEntryArmed || (!wasPlaying && isPlaying()))) {
                     // Either (a) a remote source-start just armed us, or
                     // (b) we're waking to an already-playing view. Go
                     // straight to immersive without waiting for media.
@@ -386,7 +393,16 @@
         });
 
         // Initial setup
-        if (uiStore.currentRoute === 'menu/playing') {
+        //
+        // Demo mode skips the eager entry below. On a device, waking to a
+        // playing view and getting full-bleed artwork is the point; in the
+        // browser emulator it means a visitor's first sight of the UI is an
+        // album cover with the arc hidden. They still get immersive from the
+        // idle timer or by running the laser up, same as on hardware.
+        if (uiStore.currentRoute === 'menu/playing' && !eagerEntryAllowed) {
+            resetIdleTimer();
+            setTimeout(() => ensureOverlay(), 100);
+        } else if (uiStore.currentRoute === 'menu/playing') {
             // Media state may not be loaded yet — check periodically
             let startupChecks = 0;
             const startupCheck = () => {
