@@ -199,6 +199,29 @@
       "additionalProperties": false
     },
 
+    "airplay": {
+      "type": "object",
+      "description": "AirPlay 2 source (shairport-sync metadata bridge). See docs/airplay.md.",
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "BeoLink IR source button this source claims, e.g. \"cd\" to reach AirPlay from the Beo4 CD key. Must not collide with another source's mapping."
+        },
+        "pipe": {
+          "type": "string",
+          "description": "shairport-sync metadata pipe to read.",
+          "default": "/tmp/shairport-sync-metadata"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["auto", "airplay2", "classic", "airplay1"],
+          "description": "Which AirPlay service to advertise. \"airplay2\" gives multi-room and the Home app but no transport control back to the sender; \"classic\" (AirPlay 1) gives up multi-room but its realtime streams carry the DACP credentials that make the BeoSound's transport keys work. \"auto\" picks AirPlay 2 when nqptp is running.",
+          "default": "auto"
+        }
+      },
+      "additionalProperties": false
+    },
+
     "radio": {
       "type": "object",
       "description": "Internet radio source settings.",

@@ -62,6 +62,7 @@
             { id: 'tidal', title: 'TIDAL', preset: 'tidal', dynamic: true },
             { id: 'plex', title: 'PLEX', preset: 'plex', dynamic: true },
             { id: 'radio', title: 'RADIO', preset: 'radio', dynamic: true },
+            { id: 'airplay', title: 'AIRPLAY', preset: 'airplay', dynamic: true },
             { id: 'scenes', title: 'SCENES' },
             { id: 'security', title: 'SECURITY', type: 'webpage',
               url: 'softarc/security.html' },
@@ -215,6 +216,18 @@
                 active_source: 'spotify', active_source_name: 'Spotify',
                 active_player: 'sonos', output_device: 'BeoLab 5',
                 volume: 32, transport_mode: 'webhook',
+            }));
+        }
+
+        // AirPlay source status. Idle is the interesting state to demo: it is
+        // what the view shows until someone picks the BeoSound on a phone,
+        // and it cannot be reached from the emulator any other way.
+        if (url.includes(':8775/status')) {
+            return Promise.resolve(jsonResponse({
+                source: 'airplay', name: 'AirPlay', play_state: 'idle',
+                session: false, sender: '', pipe_present: true,
+                has_artwork: false, duration: 0, position: 0,
+                title: '', artist: '', album: '',
             }));
         }
 

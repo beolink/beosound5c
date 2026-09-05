@@ -993,6 +993,39 @@ html, body {
   line-height: 2;
 }
 
+/* ── AirPlay Source ── */
+
+/* AirPlay has nothing to browse — the sender owns the queue — so this view is
+   a centred status panel rather than an arc. Geometry matches .join-empty. */
+.airplay-status {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  max-width: 80%;
+  font-weight: 300;
+  line-height: 2;
+}
+
+.airplay-status .airplay-headline {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 20px;
+  line-height: 1.5;
+}
+
+.airplay-status .airplay-sub {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.airplay-status .airplay-from {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 13px;
+  margin-top: 8px;
+}
+
 /* ── Spotify Canvas Video Panel ────────────────────────────────── */
 
 .canvas-panel {

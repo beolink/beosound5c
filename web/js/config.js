@@ -28,6 +28,9 @@ const AppConfig = {
     // Apple Music source
     appleMusicServiceUrl: 'http://localhost:8774',
 
+    // AirPlay source (shairport-sync bridge)
+    airplayServiceUrl: 'http://localhost:8775',
+
     // TIDAL source
     tidalServiceUrl: 'http://localhost:8777',
 

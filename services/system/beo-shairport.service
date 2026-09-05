@@ -1,0 +1,35 @@
+[Unit]
+Description=BeoSound5c shairport-sync (AirPlay 2 receiver)
+After=network-online.target sound.target avahi-daemon.service nqptp.service
+Wants=network-online.target avahi-daemon.service
+# AirPlay 2 clock sync is done by nqptp; without it shairport-sync refuses
+# to serve AirPlay 2 senders at all.
+Requires=nqptp.service
+OnFailure=beo-notify-failure@%n.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=__USER__
+Group=__USER__
+WorkingDirectory=/etc/beosound5c
+# Audio goes out through the PulseAudio backend, which reaches this user's
+# PipeWire graph (beo_tone_sink) exactly as go-librespot does.
+Environment=XDG_RUNTIME_DIR=/run/user/__UID__
+# Wrapper rather than the binary directly: it resolves airplay.mode from
+# config.json into --service-type, so AirPlay 2 vs classic AirPlay 1 is a
+# config setting instead of a rebuild. See docs/airplay.md.
+ExecStart=__HOME__/beosound5c/services/system/beo-shairport-launch.sh
+# Without these shairport-sync logs "Can not set realtime properties of thread
+# player_1" and runs its audio thread at normal priority, which risks dropouts
+# when the Pi is busy.
+LimitRTPRIO=99
+LimitMEMLOCK=infinity
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

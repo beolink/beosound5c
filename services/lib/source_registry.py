@@ -27,6 +27,10 @@ DEFAULT_SOURCE_HANDLES = {
     "news": {"go", "left", "right", "up", "down"},
     "radio": {"play", "pause", "next", "prev", "stop", "go", "left", "right",
               "up", "down"} | _DIGITS,
+    # No digits: an AirPlay session has no station or track numbering to
+    # jump to — the sender owns the queue.
+    "airplay": {"play", "pause", "next", "prev", "stop", "go", "left", "right",
+                "up", "down"},
 }
 
 # Known source ports — used on startup to probe running sources
@@ -35,6 +39,7 @@ DEFAULT_SOURCE_PORTS = {
     "spotify": 8771,
     "usb": 8773,
     "apple_music": 8774,
+    "airplay": 8775,
     "news": 8776,
     "tidal": 8777,
     "plex": 8778,

@@ -22,6 +22,7 @@ PLAYER_PORT = 8766   # beo-player-* (exactly one active per device)
 INPUT_PORT = 8767    # beo-input (hardware HID + LED + webhook)
 ROUTER_PORT = 8770   # beo-router
 SPOTIFY_PORT = 8771  # beo-source-spotify (also canvas endpoint)
+AIRPLAY_PORT = 8775  # beo-source-airplay (also cover-art endpoint)
 RADIO_PORT = 8779    # beo-source-radio
 
 _BASE = "http://localhost"
