@@ -8,13 +8,16 @@
 #     service if the conf changed
 #   - daemon-reload: picks up any changed service definitions
 #   - pip packages: installs any new Python dependencies
+#   - service restart: schedules services/system/restart-services.sh in a
+#     transient systemd unit (see the last step for why not inline)
 #
 # Idempotent — safe to run multiple times.
 #
 # Called automatically by the OTA updater (input.py) via:
 #   sudo <base>/install/post-update.sh
 # Can also be run manually after a git pull:
-#   sudo ./install/post-update.sh
+#   sudo ./install/post-update.sh               # migrates, then restarts services
+#   sudo ./install/post-update.sh --no-restart  # migrates only (deploy.sh restarts itself)
 
 set -e
 
@@ -27,6 +30,14 @@ SERVICE_HOME=$(getent passwd "$SERVICE_USER" | cut -d: -f6)
 SERVICE_UID=$(id -u "$SERVICE_USER")
 
 log() { echo "[post-update] $*"; }
+
+RESTART_SERVICES=1
+for arg in "$@"; do
+    case "$arg" in
+        --no-restart) RESTART_SERVICES=0 ;;
+        *) echo "[post-update] unknown argument: $arg" >&2; exit 2 ;;
+    esac
+done
 
 log "Starting (base=$BASE_DIR, user=$SERVICE_USER)"
 
@@ -153,7 +164,7 @@ fi
 # /tmp extraction on every killed run, eventually filling the sd-hardening
 # tmpfs and breaking the feature). Switch the fleet to the pip package: runs
 # in place (no /tmp extraction), always current from PyPI. Also install the
-# weekly self-update timer from install/modules/ytdlp.sh. Failure-tolerant —
+# daily self-update timer from install/modules/ytdlp.sh. Failure-tolerant —
 # a PyPI hiccup must not abort the OTA update.
 YTDLP_BIN="/usr/local/bin/yt-dlp"
 # The standalone is >20MB; pip's entry point is a tiny script. Remove the
@@ -195,8 +206,12 @@ if ! command -v deno >/dev/null 2>&1; then
     fi
 fi
 
+# Rewritten when missing, when the service predates the pip install, or when
+# the timer still runs weekly (pre-v0.9.7) — a YouTube breakage that yt-dlp
+# has already fixed shouldn't wait up to a week for the next run.
 if [ ! -f /etc/systemd/system/beo-ytdlp-update.timer ] \
-        || ! grep -q 'pip3 install' /etc/systemd/system/beo-ytdlp-update.service 2>/dev/null; then
+        || ! grep -q 'pip3 install' /etc/systemd/system/beo-ytdlp-update.service 2>/dev/null \
+        || ! grep -q 'OnCalendar=daily' /etc/systemd/system/beo-ytdlp-update.timer 2>/dev/null; then
     cat > /etc/systemd/system/beo-ytdlp-update.service << 'EOF'
 [Unit]
 Description=BeoSound 5c — update yt-dlp (music video)
@@ -209,10 +224,10 @@ ExecStart=/bin/bash -c 'pip3 install -U -q --ignore-installed --break-system-pac
 EOF
     cat > /etc/systemd/system/beo-ytdlp-update.timer << 'EOF'
 [Unit]
-Description=BeoSound 5c — weekly yt-dlp update
+Description=BeoSound 5c — daily yt-dlp update
 
 [Timer]
-OnCalendar=weekly
+OnCalendar=daily
 Persistent=true
 RandomizedDelaySec=1h
 
@@ -221,7 +236,7 @@ WantedBy=timers.target
 EOF
     systemctl daemon-reload
     systemctl enable --now beo-ytdlp-update.timer >/dev/null 2>&1 \
-        && log "yt-dlp weekly update timer installed" \
+        && log "yt-dlp daily update timer installed" \
         || log "could not enable yt-dlp update timer"
 fi
 
@@ -285,6 +300,23 @@ fi
 # See install/modules/samba-cleanup.sh — no-op once it has run.
 if [ -x "$BASE_DIR/install/modules/samba-cleanup.sh" ]; then
     bash "$BASE_DIR/install/modules/samba-cleanup.sh" || log "samba cleanup failed (non-fatal)"
+fi
+
+# ── Restart services ─────────────────────────────────────────────────────────
+# Runs in a transient systemd unit, NOT in this process: the OTA updater
+# calls us from inside beo-input, whose cgroup we share, so we would be
+# killed the moment beo-input restarts — and `systemctl restart a b c`
+# issues its jobs one at a time, which is how every update before v0.10.1
+# silently left the router, player and sources on the old code. The delay
+# lets an updater older than v0.10.1 finish its own partial restart first,
+# so the two never run at once. Last step on purpose: if scheduling fails
+# we exit non-zero and input.py falls back to restarting in-process.
+# The unit name must NOT match beo-*: every restart path lists active
+# beo-*.service units, and a unit that restarts itself loops forever.
+if [ "$RESTART_SERVICES" -eq 1 ]; then
+    systemd-run --quiet --collect --unit "bs5c-update-restart-$$" \
+        /bin/bash "$BASE_DIR/services/system/restart-services.sh" 10
+    log "Service restart scheduled (in 10 s, via restart-services.sh)"
 fi
 
 log "Done"

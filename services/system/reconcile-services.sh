@@ -37,34 +37,35 @@ REQUIRED_FAILED=()
 OPTIONAL_FAILED=()
 
 # --- Sync Spotify Connect name with the configured device name -----------
-# The Spotify Connect name IS the device name the user set. Runs before the
-# service restarts below so beo-librespot comes back up with the new name.
+# go-librespot reads its own config only at startup, so this must run before
+# the try-restart at the bottom of this script — that restart is what carries a
+# rename from the setup UI through to Spotify, without rebooting the device.
+# No-op when there is no go-librespot config (non-local players).
 LIBRESPOT_YML="/etc/beosound5c/librespot/config.yml"
-if [ -f "$LIBRESPOT_YML" ]; then
-    python3 - "$CONFIG_FILE" "$LIBRESPOT_YML" <<'PYEOF' || echo "⚠️  Could not sync Spotify Connect name"
-import json, re, sys
-cfg_path, yml_path = sys.argv[1], sys.argv[2]
-name = (json.load(open(cfg_path)).get("device") or "").strip() or "BeoSound 5c"
-quoted = '"' + name.replace("\\", "\\\\").replace('"', '\\"') + '"'
-text = open(yml_path).read()
-new = re.sub(r"(?m)^device_name:.*$", f"device_name: {quoted}", text)
-if new != text:
-    open(yml_path, "w").write(new)
-    print(f"ℹ️  Spotify Connect name -> {name}")
-PYEOF
-fi
+python3 "$SCRIPT_DIR/../lib/librespot_config.py" "$CONFIG_FILE" "$LIBRESPOT_YML" \
+    || echo "⚠️  Could not sync Spotify Connect name"
+
+# --- Sync AirPlay name with the configured device name -------------------
+# Same deal for shairport-sync (it reads its config only at startup; the
+# try-restart below carries the rename through). No-op when there is no
+# shairport-sync.conf, i.e. AirPlay was never installed here.
+python3 "$SCRIPT_DIR/../lib/shairport_config.py" "$CONFIG_FILE" /etc/beosound5c/shairport-sync.conf \
+    || echo "⚠️  Could not sync AirPlay name"
 
 # --- Determine desired player set ----------------------------------------
 PLAYER_TYPE=$(python3 -c "import json;print(json.load(open('$CONFIG_FILE')).get('player',{}).get('type','sonos'))" 2>/dev/null || echo "sonos")
 echo "ℹ️  Configured player type: $PLAYER_TYPE"
 
-ALL_PLAYERS=(beo-player-sonos beo-player-bluesound beo-player-heos beo-player-local beo-librespot)
+ALL_PLAYERS=(beo-player-sonos beo-player-bluesound beo-player-heos beo-player-wiim beo-player-mozart beo-player-ase beo-player-local beo-librespot)
 
 case "$PLAYER_TYPE" in
     local)     WANT_PLAYERS=(beo-librespot beo-player-local) ;;
     sonos)     WANT_PLAYERS=(beo-player-sonos) ;;
     bluesound) WANT_PLAYERS=(beo-player-bluesound) ;;
     heos)      WANT_PLAYERS=(beo-player-heos) ;;
+    wiim)      WANT_PLAYERS=(beo-player-wiim) ;;
+    mozart)    WANT_PLAYERS=(beo-player-mozart) ;;
+    ase)       WANT_PLAYERS=(beo-player-ase) ;;
     none)      WANT_PLAYERS=() ;;
     *)
         echo "⚠️  Unknown player type '$PLAYER_TYPE' — defaulting to sonos"
@@ -101,6 +102,24 @@ for entry in "${OPTIONAL_SOURCES[@]}"; do
         systemctl stop    "$service" 2>/dev/null || true
     fi
 done
+
+# --- AirPlay 2 receiver (shairport-sync + nqptp) -------------------------
+# Not an optional source in its own right: beo-source-airplay is the menu-
+# gated one above, and this is the daemon behind it. It only makes sense for
+# a local player (audio lands in this Pi's PipeWire graph), and it can only
+# start if install/modules/airplay.sh has built the binary.
+if grep -q '"AIRPLAY"' "$CONFIG_FILE" && [ "$PLAYER_TYPE" = "local" ]; then
+    if [ -x /usr/local/bin/shairport-sync ] && systemctl cat nqptp.service >/dev/null 2>&1; then
+        systemctl enable nqptp.service beo-shairport.service 2>/dev/null || true
+        systemctl start  nqptp.service 2>/dev/null || true
+        systemctl start  beo-shairport.service || OPTIONAL_FAILED+=("beo-shairport.service")
+    else
+        echo "⚠️  AIRPLAY is in the menu but shairport-sync/nqptp are not installed — run: sudo install/install.sh system"
+    fi
+else
+    systemctl disable beo-shairport.service 2>/dev/null || true
+    systemctl stop    beo-shairport.service 2>/dev/null || true
+fi
 
 # --- Restart running beo-* services so they pick up the new config -------
 # beo-ui reconnects automatically — skip it.

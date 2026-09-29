@@ -10,6 +10,7 @@ Current sources:
   cd.py       — CD/DVD playback via mpv, metadata from MusicBrainz
   spotify.py  — Spotify Connect browsing and playback (PKCE OAuth)
   usb.py      — USB file browsing and playback via mpv
-  plex.py     — Plex music browsing and playback
+  plex/       — Plex music browsing and playback
+  jellyfin/   — Jellyfin music browsing and playback
   news.py     — RSS/TTS news playback via local mpv
 """

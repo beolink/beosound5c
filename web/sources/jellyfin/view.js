@@ -1,0 +1,37 @@
+/**
+ * Jellyfin Source Preset
+ *
+ * Browse mode: softarc iframe with playlist/track browser (same as Spotify/Apple Music/TIDAL).
+ * Playing mode: shows track info in the standard PLAYING view via media_update
+ *   events from the player service (Sonos/BlueSound handles artwork).
+ */
+
+// ── Jellyfin Source Preset ──
+window.SourcePresets = window.SourcePresets || {};
+window.SourcePresets.jellyfin = {
+    // No controller — nav/button events route to the softarc iframe via IframeMessenger
+    item: { title: 'JELLYFIN', path: 'menu/jellyfin' },
+    after: 'menu/playing',
+    view: {
+        title: 'JELLYFIN',
+        content: `
+            <div id="jellyfin-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+            </div>`,
+        preloadId: 'preload-jellyfin',
+        iframeSrc: 'softarc/jellyfin.html',
+        containerId: 'jellyfin-container'
+    },
+
+    onAdd() {},
+
+    onMount() {
+        // The softarc iframe handles its own init via DOMContentLoaded
+    },
+
+    onRemove() {},
+
+    // No playing sub-preset needed — DEFAULT_PLAYING_PRESET handles media_update
+    // from beo-player-sonos perfectly.  Defining a separate object here would cause
+    // unnecessary DOM rebuilds (different reference from DEFAULT) and route updates
+    // through a fragile fallback path.
+};

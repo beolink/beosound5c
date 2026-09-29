@@ -62,8 +62,8 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["sonos", "bluesound", "heos", "local", "none"],
-          "description": "Player type. Determines which player service handles playback. beo-player-sonos, beo-player-bluesound, beo-player-heos, and beo-player-local are all installed; the type guard ensures only the matching one runs. 'local' plays on the Pi via mpv/librespot; 'none' runs no player (fresh-install default until setup)."
+          "enum": ["sonos", "bluesound", "heos", "wiim", "mozart", "ase", "local", "none"],
+          "description": "Player type. Determines which player service handles playback; the type guard ensures only the matching one runs. 'wiim' drives a WiiM/LinkPlay speaker via the LinkPlay HTTP API. 'mozart' (experimental) drives a modern B&O speaker via the Mozart Open API (Beolink multiroom). 'ase' (experimental) drives an older B&O speaker via the BeoZone/BeoNotify product API. 'local' plays on the Pi via mpv/librespot; 'none' runs no player (fresh-install default until setup)."
         },
         "ip": {
           "type": "string",
@@ -160,8 +160,8 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["beolab5", "sonos", "bluesound", "heos", "powerlink", "c4amp", "hdmi", "spdif", "rca"],
-          "description": "Volume adapter type. If omitted, inferred from player.type for sonos/bluesound/heos, otherwise defaults to 'beolab5'.",
+          "enum": ["beolab5", "sonos", "bluesound", "heos", "wiim", "mozart", "ase", "powerlink", "c4amp", "hdmi", "spdif", "rca"],
+          "description": "Volume adapter type. If omitted, inferred from player.type for sonos/bluesound/heos/wiim/mozart/ase, otherwise defaults to 'beolab5'.",
           "default": "beolab5"
         },
         "host": {
@@ -219,6 +219,29 @@
       "additionalProperties": false
     },
 
+    "airplay": {
+      "type": "object",
+      "description": "AirPlay 2 source (shairport-sync metadata bridge). Requires player.type \"local\" and AIRPLAY in the menu; see docs/airplay.md.",
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "BeoLink IR source button this source claims, e.g. \"cd\" to reach AirPlay from the Beo4 CD key. Must not collide with another source's mapping."
+        },
+        "pipe": {
+          "type": "string",
+          "description": "shairport-sync metadata pipe to read.",
+          "default": "/tmp/shairport-sync-metadata"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["auto", "airplay2", "classic", "airplay1"],
+          "description": "Which AirPlay service to advertise. \"airplay2\" gives multi-room and the Home app but no transport control back to the sender; \"classic\" (AirPlay 1) gives up multi-room but its realtime streams carry the DACP credentials that make the BeoSound's transport keys work. \"auto\" picks AirPlay 2 when nqptp is running.",
+          "default": "auto"
+        }
+      },
+      "additionalProperties": false
+    },
+
     "radio": {
       "type": "object",
       "description": "Internet radio source settings.",
@@ -249,6 +272,26 @@
         "client_id": {
           "type": "string",
           "description": "Spotify app Client ID from https://developer.spotify.com/dashboard. Leave empty to disable Spotify."
+        },
+        "connect_device": {
+          "type": "string",
+          "description": "Experimental. For network players without ShareLink (bluesound/heos/wiim), the name of the speaker's built-in Spotify Connect device to play to (matched case-insensitively). If omitted, falls back to the device name, then the active/first Connect device. Requires Spotify Premium."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "jellyfin": {
+      "type": "object",
+      "description": "Jellyfin integration settings. Signing in happens on the source's own setup page (http://<device-ip>:8781/setup) via Quick Connect or username/password; the access token is stored in /etc/beosound5c/jellyfin_tokens.json, never here.",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "Jellyfin server base URL, e.g. http://jellyfin.local:8096. Optional — it pre-fills the setup page, which then stores whatever address you actually signed in against."
+        },
+        "source": {
+          "type": "string",
+          "description": "Beo4/BeoRemote One source button that selects Jellyfin (see docs/remotes.md)."
         }
       },
       "additionalProperties": false

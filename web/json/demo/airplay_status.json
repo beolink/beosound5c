@@ -1,0 +1,14 @@
+{
+  "source": "airplay",
+  "name": "AirPlay",
+  "play_state": "idle",
+  "sender": "",
+  "pipe": "/tmp/shairport-sync-metadata",
+  "pipe_present": true,
+  "has_artwork": false,
+  "duration": 0,
+  "position": 0,
+  "title": "",
+  "artist": "",
+  "album": ""
+}

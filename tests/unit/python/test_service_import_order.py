@@ -33,7 +33,7 @@ SERVICES = Path(__file__).resolve().parents[3] / "services"
 
 def _service_files():
     """All source service entry-point files we need to check."""
-    for sub in ("spotify", "plex", "apple_music", "tidal", "usb", "radio"):
+    for sub in ("spotify", "plex", "jellyfin", "apple_music", "tidal", "usb", "radio"):
         p = SERVICES / "sources" / sub / "service.py"
         if p.exists():
             yield p

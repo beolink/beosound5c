@@ -22,6 +22,9 @@ PLAYER_PORT = 8766   # beo-player-* (exactly one active per device)
 INPUT_PORT = 8767    # beo-input (hardware HID + LED + webhook)
 ROUTER_PORT = 8770   # beo-router
 SPOTIFY_PORT = 8771  # beo-source-spotify (also canvas endpoint)
+# 8772 and 8775 are the HTTPS setup pages of beo-source-spotify and
+# beo-source-apple-music (SSL_PORT in their service.py) — not free.
+AIRPLAY_PORT = 8782  # beo-source-airplay (also cover-art endpoint)
 RADIO_PORT = 8779    # beo-source-radio
 
 _BASE = "http://localhost"
@@ -81,6 +84,9 @@ ROUTER_OUTPUT_ON = f"{_ROUTER_BASE}/output/on"
 ROUTER_OUTPUT_OFF = f"{_ROUTER_BASE}/output/off"
 ROUTER_TOUCH = f"{_ROUTER_BASE}/touch"
 ROUTER_STATUS = f"{_ROUTER_BASE}/status"
+# Re-create the volume adapter from the current active target (after a
+# SPEAKERS "Play here" retarget) so volume control follows the new room live.
+ROUTER_TARGET_RELOAD = f"{_ROUTER_BASE}/target/reload"
 
 # beo-masterlink mixer HTTP API (only present on devices with a PC2 card)
 MIXER_ML_STANDBY = "http://localhost:8768/ml/standby"

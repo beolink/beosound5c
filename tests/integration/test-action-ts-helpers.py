@@ -18,7 +18,7 @@ SKIP = 0
 
 SOURCE_PORTS = {
     "cd": 8769, "usb": 8773, "spotify": 8771,
-    "plex": 8778, "radio": 8779, "apple_music": 8774,
+    "plex": 8778, "jellyfin": 8781, "radio": 8779, "apple_music": 8774,
     "tidal": 8777,
 }
 

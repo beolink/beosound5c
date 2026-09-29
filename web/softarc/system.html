@@ -1435,6 +1435,10 @@
                 { fid: 'ir_source', label: 'IR trigger', path: ['plex','source'], isIr: true, optional: true },
                 { fid: 'url', label: 'Server URL', path: ['plex','url'], placeholder: 'https://plex.server:32400', optional: true, hint: 'Leave blank for local server' },
             ]},
+            { key: 'JELLYFIN', label: 'Jellyfin', authPort: 8781, fields: [
+                { fid: 'ir_source', label: 'IR trigger', path: ['jellyfin','source'], isIr: true, optional: true },
+                { fid: 'url', label: 'Server URL', path: ['jellyfin','url'], placeholder: 'http://jellyfin.local:8096', optional: true, hint: 'Pre-fills the sign-in page' },
+            ]},
             { key: 'RADIO', label: 'Radio', fields: [
                 { fid: 'ir_source', label: 'IR trigger', path: ['radio','source'], isIr: true, optional: true },
             ]},
@@ -1460,7 +1464,7 @@
 
         const CFG_SOURCE_VIEWS = {
             'PLAYING':'playing','JOIN':'join','SPOTIFY':'spotify','TIDAL':'tidal',
-            'APPLE MUSIC':'apple_music','PLEX':'plex','RADIO':'radio','CD':'cd',
+            'APPLE MUSIC':'apple_music','PLEX':'plex','JELLYFIN':'jellyfin','RADIO':'radio','CD':'cd',
             'USB':'usb','NEWS':'news','SCENES':'scenes','SYSTEM':'system','SHOWING':'showing',
         };
 

@@ -40,12 +40,13 @@ PLAYER = "http://localhost:8766"
 # Source button → expected active source ID and player backend.
 # The button name is what the IR remote sends; the source ID is what
 # the router maps it to (via config.json source_buttons).
-# Backend expectations: radio/usb/cd/plex/news → mpv, spotify → librespot.
+# Backend expectations: radio/usb/cd/plex/jellyfin/news → mpv, spotify → librespot.
 BACKEND_MAP = {
     "radio": "mpv",
     "usb": "mpv",
     "cd": "mpv",
     "plex": "mpv",
+    "jellyfin": "mpv",
     "news": "mpv",
     "spotify": "librespot",
 }

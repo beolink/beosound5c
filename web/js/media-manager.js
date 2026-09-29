@@ -29,6 +29,19 @@ function crossfadeText(el, newText) {
 }
 window.crossfadeText = crossfadeText;
 
+/** Shared "is this media state playing" check (TRANSITIONING = Sonos between tracks). */
+function isPlayingState(state) {
+    return state === 'playing' || state === 'TRANSITIONING';
+}
+window.isPlayingState = isPlayingState;
+
+// End of the ▶ resume flash — drop the class so the next edge can re-trigger it.
+document.addEventListener('animationend', (e) => {
+    if (e.animationName === 'bs5c-resume-flash') {
+        document.body.classList.remove('playback-resumed');
+    }
+});
+
 const DEFAULT_PLAYING_PRESET = {
     // All sources push metadata via the unified router media path.
     // media_update events reach this preset via handleMediaUpdate() → updateNowPlayingView().
@@ -132,6 +145,7 @@ class MediaManager {
         // existing if payload doesn't include one (e.g. canvas_inject
         // re-broadcasts mutate canvas_url but keep the same track_id).
         const keepTrackId = reason !== 'track_change' && !('track_id' in data);
+        const prevState = this.mediaInfo.state;
         this.mediaInfo = {
             title: data.title || '—',
             artist: data.artist || '—',
@@ -146,11 +160,40 @@ class MediaManager {
             duration: data.duration || '0:00'
         };
 
+        this._syncPlaybackStateClasses(prevState, this.mediaInfo);
+
         document.dispatchEvent(new CustomEvent('bs5c:media-update', {
             detail: { data: this.mediaInfo, reason }
         }));
 
         this.updateNowPlayingView();
+    }
+
+    /**
+     * On-screen playback state (see styles.css "Playback state"):
+     *   body.playback-paused  — a track is loaded but not playing. Draws the
+     *                           ❚❚ glyph above the title and dims the artwork.
+     *   body.playback-resumed — set on the not-playing → playing edge, flashes
+     *                           ▶ once; the CSS animation's end removes it.
+     * Also fires bs5c:playback-started on that edge (immersive-mode.js).
+     */
+    _syncPlaybackStateClasses(prevState, mi) {
+        const hasTrack = !!(mi.title && mi.title !== '—');
+        const paused = hasTrack && (mi.state === 'paused' || mi.state === 'stopped');
+        document.body.classList.toggle('playback-paused', paused);
+
+        const wasPlaying = isPlayingState(prevState);
+        const nowPlaying = isPlayingState(mi.state);
+        if (!wasPlaying && nowPlaying) {
+            // Only flash when a state element is on screen; otherwise the
+            // class would linger and flash late on the next PLAYING mount.
+            if (document.querySelector('.media-view-state, .immersive-info-state')) {
+                document.body.classList.remove('playback-resumed');
+                document.body.offsetHeight;  // restart the animation if mid-flash
+                document.body.classList.add('playback-resumed');
+            }
+            document.dispatchEvent(new CustomEvent('bs5c:playback-started'));
+        }
     }
 
     updateNowPlayingView() {
