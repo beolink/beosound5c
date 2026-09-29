@@ -39,15 +39,16 @@ Port: 8780
 import asyncio
 import json
 import logging
-import os
 import signal
 import sys
 
 import aiohttp
 from aiohttp import web
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
+# No sys.path juggling: this module sits directly in services/, and Python
+# already puts a script's own directory on sys.path, so lib/ is importable as
+# it stands. The sources need the insert because they live a level or two
+# deeper; that is why the lint baseline grandfathers them and not this.
 from lib.background_tasks import BackgroundTaskSet
 from lib.config import cfg
 from lib.endpoints import AIRPLAY_OUT_PORT, ROUTER_STATUS
