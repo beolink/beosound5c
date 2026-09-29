@@ -382,6 +382,12 @@ function handleButtonEvent(uiStore, data) {
     const button = data.button.toLowerCase();
     console.log(`[BUTTON] ${button} on ${page}`);
 
+    // Physical GO on PLAYING = resume from this device: immersive-mode must
+    // not treat the resulting playback start as an external one.
+    if (button === 'go' && page === 'menu/playing') {
+        window.ImmersiveMode?.noteLocalPlayIntent?.();
+    }
+
     // Global overlay intercept — camera overlay captures all buttons when active
     if (window.CameraOverlayManager?.isActive &&
         window.CameraOverlayManager.handleAction(button)) return;

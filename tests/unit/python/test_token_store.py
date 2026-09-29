@@ -57,6 +57,21 @@ def test_load_corrupt_returns_none(store):
     assert store.load() is None
 
 
+@pytest.mark.parametrize("payload", ['"abc123"', '["a", "b"]', "42", "null"])
+def test_load_non_dict_json_returns_none(store, payload):
+    """Valid JSON that isn't an object is corrupt too.
+
+    Returning it would make every caller's ``.get()`` raise
+    AttributeError — and the sources call ``load()`` at service startup,
+    where an exception plus ``Restart=on-failure`` means a dead unit.
+    """
+    path = store.path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(payload)
+    assert store.load() is None
+
+
 # ── Atomicity ─────────────────────────────────────────────────────────
 
 

@@ -61,11 +61,14 @@ _UPDATE_EXCLUDES = [
     'web/json/tidal_digit_playlists.json',
     'web/json/plex_playlists.json',
     'web/json/plex_digit_playlists.json',
+    'web/json/jellyfin_playlists.json',
+    'web/json/jellyfin_digit_playlists.json',
     'web/assets/cd-cache',
     'services/sources/spotify/spotify_tokens.json',
     'services/sources/apple_music/apple_music_tokens.json',
     'services/sources/tidal/tidal_tokens.json',
     'services/sources/plex/plex_tokens.json',
+    'services/sources/jellyfin/jellyfin_tokens.json',
     'services/sources/radio/radio_last_station.json',
     'services/sources/radio/radio_favourites.json',
 ]
@@ -88,6 +91,15 @@ power_button_pressed_at = 0.0  # wall time of the current press (long-press dete
 # Hold the power button this long to send ALL-STANDBY (local standby +
 # ML broadcast so link speakers in other rooms power down too).
 POWER_LONGPRESS_ALL_STANDBY = 5.0
+
+# Any physical input on a dark screen wakes the BS5c, exactly like a short
+# power press: backlight on, click, and a touch on the router so the
+# auto-standby idle clock restarts. The waking input itself is swallowed —
+# a wheel turn on a black screen should light it up, not scroll a menu or
+# change a volume you can't see. The laser needs a real movement: the sensor
+# jitters by ±1 position at rest, which must never wake the screen at night.
+LASER_WAKE_DELTA = 3      # positions (arc is 3..123)
+_laser_ref_off = None     # laser position first seen with the screen off
 
 def is_backlight_on():
     """Check backlight state from the hardware state byte."""
@@ -402,6 +414,60 @@ async def _fetch_latest_release():
         return None
 
 
+def _active_beo_services() -> list:
+    """Names of the beo-* units systemd currently reports active."""
+    res = subprocess.run(
+        ['systemctl', 'list-units', 'beo-*.service', '--state=active',
+         '--no-legend', '--no-pager', '--plain'],
+        capture_output=True, text=True, timeout=5,
+    )
+    # A restart helper unit must never restart itself (it would loop).
+    return [line.split()[0].removesuffix('.service')
+            for line in res.stdout.splitlines()
+            if line.split() and 'update-restart' not in line.split()[0]]
+
+
+def _restart_plan(services) -> list:
+    """Shell steps that restart the given active beo-* services, in an order
+    that survives the caller's own restart. Python twin of
+    services/system/restart-services.sh for the paths that cannot reach it
+    as root: the system panel's restart-all, and the OTA fallback when
+    post-update.sh is missing or fails.
+
+    The helper that runs these steps is spawned by beo-input and therefore
+    lives in beo-input's cgroup — start_new_session does not change that.
+    The moment systemd stops beo-input, the helper dies with it, and
+    `systemctl restart a b c` issues its jobs one unit at a time, so every
+    unit listed after beo-input was silently never restarted (alphabetical
+    order put it third: on a Sonos device the router, player and sources
+    kept running the old code until the next reboot). beo-input therefore
+    goes last, on its own, after beo-ui has been restarted against the
+    fresh backends. Steps are joined with ';' so one failed restart does
+    not skip the rest.
+    """
+    services = [s for s in services if 'update-restart' not in s]
+    backend = [s for s in services if s not in ('beo-ui', 'beo-input')]
+    parts = ['sleep 2']
+    if backend:
+        parts.append(f"sudo systemctl restart {' '.join(backend)}")
+    if 'beo-ui' in services:
+        parts.append('sleep 3')
+        parts.append('sudo systemctl restart beo-ui')
+    if 'beo-input' in services:
+        parts.append('sudo systemctl restart beo-input')
+    return parts
+
+
+def _spawn_restart(parts) -> None:
+    """Run the restart steps detached, so the HTTP reply gets out first."""
+    subprocess.Popen(
+        ['bash', '-c', '; '.join(parts)],
+        start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 async def _run_update():
     """Download and install the latest release, then restart all beo-* services."""
     global _update_in_progress, _update_step
@@ -479,42 +545,20 @@ async def _run_update():
                 )
                 if result.returncode == 0:
                     logger.info('[update] Post-update done')
+                    restart_scheduled = True
                 else:
                     logger.warning('[update] Post-update failed (non-fatal): %s', result.stderr.strip())
             except Exception as e:
                 logger.warning('[update] Post-update error (non-fatal): %s', e)
 
-        logger.info('[update] Scheduling service restart')
         _update_step = 'restarting'
-
-        # Discover active beo-* services
-        res = await asyncio.get_running_loop().run_in_executor(
-            None,
-            lambda: subprocess.run(
-                ['systemctl', 'list-units', 'beo-*.service', '--state=active',
-                 '--no-legend', '--no-pager', '--plain'],
-                capture_output=True, text=True, timeout=5,
-            ),
-        )
-        services = [
-            line.split()[0].removesuffix('.service')
-            for line in res.stdout.splitlines() if line.split()
-        ]
-        backend = [s for s in services if s != 'beo-ui']
-        has_ui = 'beo-ui' in services
-
-        parts = ['sleep 2']
-        if backend:
-            parts.append(f"sudo systemctl restart {' '.join(backend)}")
-        if has_ui:
-            parts.append('sleep 3 && sudo systemctl restart beo-ui')
-
-        subprocess.Popen(
-            ['bash', '-c', ' && '.join(parts)],
-            start_new_session=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        if restart_scheduled:
+            logger.info('[update] Service restart scheduled by post-update.sh')
+        else:
+            logger.info('[update] Scheduling service restart in-process (post-update.sh unavailable)')
+            services = await asyncio.get_running_loop().run_in_executor(
+                None, _active_beo_services)
+            _spawn_restart(_restart_plan(services))
 
         # _update_in_progress deliberately stays True here: the restart is
         # imminent and this process is about to be killed. But if the
@@ -879,6 +923,121 @@ async def handle_discover_heos(request):
         return web.json_response(devices, headers={'Access-Control-Allow-Origin': '*'})
     except Exception as e:
         logger.warning('HEOS discovery failed: %s', e)
+        return web.json_response([], headers={'Access-Control-Allow-Origin': '*'})
+
+
+async def handle_discover_wiim(request):
+    """GET /discover/wiim — find WiiM/LinkPlay players via SSDP.
+
+    LinkPlay announces as a generic UPnP MediaRenderer (not mDNS), so we
+    M-SEARCH for that, then confirm each responder is LinkPlay by reading
+    getStatusEx (only LinkPlay answers with a uuid + wmrm_version)."""
+    import socket
+
+    ssdp_request = (
+        'M-SEARCH * HTTP/1.1\r\n'
+        'HOST: 239.255.255.250:1900\r\n'
+        'MAN: "ssdp:discover"\r\n'
+        'MX: 2\r\n'
+        'ST: urn:schemas-upnp-org:device:MediaRenderer:1\r\n'
+        '\r\n'
+    ).encode()
+
+    found_ips: list = []
+
+    class _SsdpProtocol(asyncio.DatagramProtocol):
+        def connection_made(self, transport):
+            transport.sendto(ssdp_request, ('239.255.255.250', 1900))
+
+        def datagram_received(self, data, addr):
+            if addr[0] not in found_ips:
+                found_ips.append(addr[0])
+
+    try:
+        loop = asyncio.get_event_loop()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+        sock.bind(('', 0))
+        transport, _ = await loop.create_datagram_endpoint(_SsdpProtocol, sock=sock)
+        try:
+            await asyncio.sleep(3)
+        finally:
+            transport.close()
+
+        devices = []
+        async with ClientSession() as session:
+            for ip in found_ips:
+                for scheme in ('https', 'http'):
+                    try:
+                        url = f'{scheme}://{ip}/httpapi.asp?command=getStatusEx'
+                        async with session.get(
+                            url, ssl=False,
+                            timeout=aiohttp.ClientTimeout(total=3)) as resp:
+                            info = await resp.json(content_type=None)
+                    except Exception:
+                        continue
+                    if isinstance(info, dict) and info.get('uuid'):
+                        devices.append({'ip': ip,
+                                        'name': info.get('ssid')
+                                        or info.get('DeviceName') or ip})
+                    break
+        devices.sort(key=lambda x: x['name'])
+        return web.json_response(devices, headers={'Access-Control-Allow-Origin': '*'})
+    except Exception as e:
+        logger.warning('WiiM discovery failed: %s', e)
+        return web.json_response([], headers={'Access-Control-Allow-Origin': '*'})
+
+
+def _avahi_txt(parts: list) -> dict:
+    """TXT records out of an ``avahi-browse -p`` resolved line
+    (field 9: ``"k=v" "k=v" …``) as a dict."""
+    if len(parts) < 10:
+        return {}
+    out = {}
+    for item in parts[9].split('" "'):
+        item = item.strip().strip('"')
+        if '=' in item:
+            k, v = item.split('=', 1)
+            out[k] = v
+    return out
+
+
+async def handle_discover_bno(request):
+    """GET /discover/mozart and /discover/ase — find Bang & Olufsen network
+    speakers via mDNS. Mozart products advertise ``_bangolufsen._tcp`` (TXT
+    fn=friendly name, sn, tn, in); ASE products ``_beoremote._tcp`` (TXT
+    name, jid, type, productType) — per the B&O app's own discovery code
+    (private/apk/FINDINGS.md §1)."""
+    service = '_beoremote._tcp' if request.path.rstrip('/').endswith('/ase') else '_bangolufsen._tcp'
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            'avahi-browse', '-r', '-t', '-p', service,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL)
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+        devices = []
+        seen: set = set()
+        for line in stdout.decode(errors='replace').splitlines():
+            parts = line.split(';')
+            if len(parts) < 9 or parts[0] != '=' or parts[2] != 'IPv4':
+                continue
+            name, addr = parts[3], parts[7]
+            # Prefer the friendly name from TXT (fn= on Mozart, name= on ASE)
+            # over the service instance name.
+            txt = _avahi_txt(parts)
+            name = txt.get('fn') or txt.get('name') or name
+            if addr and addr not in seen:
+                seen.add(addr)
+                devices.append({'name': name, 'ip': addr})
+        devices.sort(key=lambda x: x['name'])
+        return web.json_response(devices, headers={'Access-Control-Allow-Origin': '*'})
+    except asyncio.TimeoutError:
+        return web.json_response([], headers={'Access-Control-Allow-Origin': '*'})
+    except FileNotFoundError:
+        logger.debug('avahi-browse not found — B&O discovery unavailable')
+        return web.json_response([], headers={'Access-Control-Allow-Origin': '*'})
+    except Exception as e:
+        logger.warning('B&O discovery failed: %s', e)
         return web.json_response([], headers={'Access-Control-Allow-Origin': '*'})
 
 
@@ -1269,7 +1428,8 @@ _ALLOWED_SERVICES = {
     'beo-player-sonos', 'beo-player-bluesound', 'beo-player-local',
     'beo-source-cd', 'beo-source-spotify', 'beo-source-plex', 'beo-source-radio',
     'beo-source-usb', 'beo-source-news', 'beo-source-tidal', 'beo-source-apple-music',
-    'beo-librespot', 'beo-health', 'beo-beo6',
+    'beo-source-jellyfin', 'beo-source-airplay',
+    'beo-librespot', 'beo-shairport', 'beo-health', 'beo-beo6',
 }
 
 async def restart_service(action: str):
@@ -1279,7 +1439,11 @@ async def restart_service(action: str):
         if action == 'reboot':
             subprocess.Popen(['sudo', 'reboot'])  # fire-and-forget, non-blocking
         elif action == 'restart-all':
-            subprocess.Popen(['sudo', 'systemctl', 'restart', 'beo-masterlink', 'beo-bluetooth', 'beo-router', 'beo-player-sonos', 'beo-source-cd', 'beo-source-spotify', 'beo-input', 'beo-http', 'beo-ui'])
+            # Same ordering rule as the OTA restart: this handler runs inside
+            # beo-input, so beo-input must be the last unit touched.
+            services = await asyncio.get_running_loop().run_in_executor(
+                None, _active_beo_services)
+            _spawn_restart(_restart_plan(services))
         elif action.startswith('restart-'):
             service = 'beo-' + action.replace('restart-', '')
             # CD source: eject disc first, use correct service name
@@ -1477,6 +1641,55 @@ async def _forward_to_router(event_type: str, data: dict):
         logger.warning('Router broadcast %s failed: %s', event_type, e)
 
 
+MAX_OVERLAY_CAMERAS = 2
+
+
+def normalize_show_camera_cameras(params: dict) -> list:
+    """Normalize show_camera params into a [{'title','entity'}] list.
+
+    Two accepted forms — the array, which mirrors the "cameras" shape in
+    config.json:
+
+        {"cameras": [{"title": "Front door", "entity": "<entity id>"}, ...]}
+
+    and the older singular pair, kept so existing HA automations keep
+    working:
+
+        {"title": "Doorbell", "camera_entity": "<entity id>"}
+
+    An empty result means "use the cameras from config.json" — every
+    parameter is optional. Entries without an entity are dropped and the
+    list is capped at MAX_OVERLAY_CAMERAS (the overlay has two slots).
+    """
+    raw = params.get('cameras')
+    if isinstance(raw, list):
+        cameras = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            entity = str(item.get('entity') or '').strip()
+            if not entity:
+                continue
+            cameras.append({
+                'entity': entity,
+                'title': str(item.get('title') or '').strip(),
+            })
+            if len(cameras) == MAX_OVERLAY_CAMERAS:
+                break
+        if len(raw) > len(cameras):
+            logger.warning(
+                'show_camera: %d camera(s) given, using %d (max %d, entries '
+                'without an entity are skipped)',
+                len(raw), len(cameras), MAX_OVERLAY_CAMERAS)
+        return cameras
+
+    entity = str(params.get('camera_entity') or '').strip()
+    if entity:
+        return [{'entity': entity,
+                 'title': str(params.get('title') or '').strip()}]
+    return []
+
+
 async def process_command(data: dict) -> dict:
     """Process an incoming command (from HTTP webhook or MQTT).
 
@@ -1557,27 +1770,21 @@ async def process_command(data: dict) -> dict:
         return {'status': 'ok', 'action': 'prev_screen'}
 
     elif command == 'show_camera':
-        title = params.get('title', 'Camera')
-        camera_entity = params.get('camera_entity', '')
-        camera_id = params.get('camera_id', 'camera')
-        actions = params.get('actions', {})
+        cameras = normalize_show_camera_cameras(params)
 
-        if not camera_entity:
-            # The automation has to say which camera; the device has no
-            # opinion about what a home's cameras are called.
-            logger.warning('show_camera without camera_entity — ignoring')
-            return {'status': 'error', 'message': 'camera_entity is required'}
-
-        logger.info('Showing camera overlay: %s (%s)', title, camera_entity)
+        if cameras:
+            logger.info('Showing camera overlay: %s',
+                        ', '.join(c['entity'] for c in cameras))
+        else:
+            # No cameras named — the overlay falls back to config.json.
+            logger.info('Showing camera overlay: cameras from config')
         set_backlight(True)
-        await _forward_to_router('camera_overlay', {
-            'action': 'show',
-            'title': title,
-            'camera_entity': camera_entity,
-            'camera_id': camera_id,
-            'actions': actions
-        })
-        return {'status': 'ok', 'command': 'show_camera', 'title': title}
+        payload = {'action': 'show', 'actions': params.get('actions', {})}
+        if cameras:
+            payload['cameras'] = cameras
+        await _forward_to_router('camera_overlay', payload)
+        return {'status': 'ok', 'command': 'show_camera',
+                'cameras': len(cameras)}
 
     elif command == 'dismiss_camera':
         logger.info('Dismissing camera overlay')
@@ -2048,6 +2255,42 @@ _hid_alive = True   # cleared when scan_loop thread dies
 
 HID_RETRY_INTERVAL = 3  # seconds between device scan retries
 
+def input_wakes(nav_evt, vol_evt, btn_evt, laser_pos):
+    """Return why this HID report should wake a dark screen, or None.
+
+    Pure decision (apart from tracking the laser's resting position while
+    the screen is off) so it can be unit-tested without hardware. The power
+    button is excluded: parse_report already toggled the screen for it.
+    """
+    global _laser_ref_off
+    if is_backlight_on():
+        _laser_ref_off = None
+        return None
+    if nav_evt:
+        return 'nav wheel'
+    if vol_evt:
+        return 'volume wheel'
+    if btn_evt and btn_evt.get('button') != 'power':
+        return f"{btn_evt['button']} button"
+    if laser_pos is not None:
+        if _laser_ref_off is None:
+            _laser_ref_off = laser_pos
+        elif abs(laser_pos - _laser_ref_off) >= LASER_WAKE_DELTA:
+            return 'laser'
+    return None
+
+
+def wake_from_input(reason: str, loop):
+    """Wake the screen the way a short power press does."""
+    logger.info("%s while screen off -> wake", reason)
+    set_backlight(True)
+    do_click()
+    try:
+        asyncio.run_coroutine_threadsafe(_output_power(ROUTER_TOUCH), loop)
+    except Exception:
+        pass
+
+
 def scan_loop(loop):
     global dev, _hid_alive
 
@@ -2084,6 +2327,11 @@ def scan_loop(loop):
                     nav_evt, vol_evt, btn_evt, laser_pos = parse_report(rep, loop)
                     if laser_pos is None:
                         continue
+
+                    wake_reason = input_wakes(nav_evt, vol_evt, btn_evt, laser_pos)
+                    if wake_reason:
+                        wake_from_input(wake_reason, loop)
+                        nav_evt = vol_evt = btn_evt = None
 
                     for evt_type, evt in (
                         ('nav',    nav_evt),
@@ -2157,6 +2405,9 @@ async def main():
     app.router.add_get('/discover/sonos', handle_discover_sonos)
     app.router.add_get('/discover/bluesound', handle_discover_bluesound)
     app.router.add_get('/discover/heos', handle_discover_heos)
+    app.router.add_get('/discover/wiim', handle_discover_wiim)
+    app.router.add_get('/discover/mozart', handle_discover_bno)
+    app.router.add_get('/discover/ase', handle_discover_bno)
     app.router.add_post('/config', handle_config_save)
     app.router.add_options('/config', handle_config_save)
     runner = web.AppRunner(app, access_log=None)

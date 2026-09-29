@@ -26,6 +26,9 @@ SPOTIFY_PORT = 8771  # beo-source-spotify (also canvas endpoint)
 # service.py). Recorded here because it is not otherwise visible from this
 # module, and picking it for a new service produces a bind conflict that only
 # shows up once Spotify happens to be running.
+# 8772 and 8775 are the HTTPS setup pages of beo-source-spotify and
+# beo-source-apple-music (SSL_PORT in their service.py) — not free.
+AIRPLAY_PORT = 8782  # beo-source-airplay (also cover-art endpoint)
 RADIO_PORT = 8779    # beo-source-radio
 AIRPLAY_OUT_PORT = 8780  # beo-airplay-out (mirror to AirPlay receivers)
 
@@ -86,6 +89,9 @@ ROUTER_OUTPUT_ON = f"{_ROUTER_BASE}/output/on"
 ROUTER_OUTPUT_OFF = f"{_ROUTER_BASE}/output/off"
 ROUTER_TOUCH = f"{_ROUTER_BASE}/touch"
 ROUTER_STATUS = f"{_ROUTER_BASE}/status"
+# Re-create the volume adapter from the current active target (after a
+# SPEAKERS "Play here" retarget) so volume control follows the new room live.
+ROUTER_TARGET_RELOAD = f"{_ROUTER_BASE}/target/reload"
 
 # beo-masterlink mixer HTTP API (only present on devices with a PC2 card)
 MIXER_ML_STANDBY = "http://localhost:8768/ml/standby"

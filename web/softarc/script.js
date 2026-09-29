@@ -10,7 +10,7 @@
 // report GO to the website emulator the same way; the emulator shell resolves
 // the playlist by id against its own demo pool, which is the union of these
 // services' playlists.
-const MUSIC_SERVICE_CONTEXTS = ['spotify', 'apple_music', 'tidal', 'plex'];
+const MUSIC_SERVICE_CONTEXTS = ['spotify', 'apple_music', 'tidal', 'plex', 'jellyfin'];
 
 class ArcList {
     constructor(config = {}) {

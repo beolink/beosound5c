@@ -61,7 +61,9 @@
             { id: 'apple_music', title: 'APPLE MUSIC', preset: 'apple_music', dynamic: true },
             { id: 'tidal', title: 'TIDAL', preset: 'tidal', dynamic: true },
             { id: 'plex', title: 'PLEX', preset: 'plex', dynamic: true },
+            { id: 'jellyfin', title: 'JELLYFIN', preset: 'jellyfin', dynamic: true },
             { id: 'radio', title: 'RADIO', preset: 'radio', dynamic: true },
+            { id: 'airplay', title: 'AIRPLAY', preset: 'airplay', dynamic: true },
             { id: 'scenes', title: 'SCENES' },
             { id: 'security', title: 'SECURITY', type: 'webpage',
               url: 'softarc/security.html' },
@@ -154,7 +156,9 @@
         '8776': 'news',
         '8777': 'tidal',
         '8778': 'plex',
+        '8781': 'jellyfin',
         '8779': 'radio',
+        '8782': 'airplay',
     };
 
     // Endpoint → demo file, per source. Shapes match what each service
@@ -166,9 +170,14 @@
         apple_music: { '/playlists': 'apple_music_playlists.json' },
         tidal:       { '/playlists': 'tidal_playlists.json' },
         plex:        { '/playlists': 'plex_playlists.json' },
+        jellyfin:    { '/playlists': 'jellyfin_playlists.json' },
         radio:       { '/browse': 'radio_browse.json', '/favourites': 'radio_favourites.json' },
         news:        { '/articles': 'news_articles.json' },
         usb:         { '/browse': 'usb_browse.json' },
+        // Idle is the state worth demoing: it is what the AIRPLAY view shows
+        // until someone picks the BeoSound on a phone, and it cannot be
+        // reached from the emulator any other way.
+        airplay:     { '/status': 'airplay_status.json' },
     };
 
     // radio_browse.json is keyed by browse path; the others are served as-is.
@@ -180,6 +189,7 @@
         'apple_music_playlists.json': 'apple_music_playlists.json',
         'tidal_playlists.json': 'tidal_playlists.json',
         'plex_playlists.json': 'plex_playlists.json',
+        'jellyfin_playlists.json': 'jellyfin_playlists.json',
         'digit_playlists.json': 'digit_playlists.json',
         'scenes.json': 'scenes.json',
     };

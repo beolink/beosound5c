@@ -73,7 +73,7 @@ config/                     # Per-device configuration
 ├── secrets.env.example     #   Credentials template
 └── <device>.json           #   One per device (deployed to /etc/beosound5c/)
 services/                   # Backend Python services
-├── sources/                #   Music sources (Spotify, Plex, CD, USB, Radio, News…)
+├── sources/                #   Music sources (Spotify, Plex, Jellyfin, AirPlay, CD, USB, Radio, News…)
 ├── players/                #   Playback backends (Sonos, BlueSound, HEOS, Local/mpv)
 ├── lib/                    #   Shared libs (player_base, source_base, volume_adapters…)
 ├── router.py               #   Event router (beo-router)

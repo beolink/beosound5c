@@ -83,9 +83,17 @@ class TokenStore:
         path = self.path()
         try:
             with open(path) as f:
-                return json.load(f)
+                data = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             return None
+        if not isinstance(data, dict):
+            # Valid JSON that isn't an object (a bare string, an array) is
+            # as corrupt as unparseable JSON — returning it would make
+            # every caller's .get() raise, and load() runs at service
+            # startup where an exception means a dead unit.
+            log.warning("Token file %s is not a JSON object - ignoring", path)
+            return None
+        return data
 
     # ── Save ──
 

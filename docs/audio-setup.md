@@ -4,11 +4,17 @@ Each BeoSound 5c is configured with a **player** (how audio is played) and a **v
 
 ## Which setup is right for me?
 
-- **Sonos speakers?** Use Sonos as your player. The Sonos speaker handles playback natively — the BS5c sends commands and monitors what's playing but does not produce audio itself. All streaming sources (Spotify, Apple Music, TIDAL, Plex) work. Set `player.type` to `"sonos"` and `volume.type` to `"sonos"`.
+- **Sonos speakers?** Use Sonos as your player. The Sonos speaker handles playback natively — the BS5c sends commands and monitors what's playing but does not produce audio itself. All streaming sources (Spotify, Apple Music, TIDAL, Plex, Jellyfin) work. Set `player.type` to `"sonos"` and `volume.type` to `"sonos"`.
 
-- **BluOS player?** Use BlueSound as your player. Plex, CD, and USB work. Spotify, Apple Music, and TIDAL do not — they send share links that only Sonos handles via ShareLink. Set `player.type` to `"bluesound"` and `volume.type` to `"bluesound"`.
+- **BluOS player?** Use BlueSound as your player. Plex, Jellyfin, CD, USB, and TIDAL work. Spotify works via Spotify Connect (experimental, requires Premium). Apple Music does not — it sends share links only Sonos handles. Set `player.type` to `"bluesound"` and `volume.type` to `"bluesound"`.
 
-- **Denon HEOS device?** Use HEOS as your player. Same source support as BlueSound: Plex, CD, and USB work; Spotify, Apple Music, and TIDAL-via-ShareLink do not. Works with any HEOS-enabled device (HEOS speakers, Denon/Marantz AVRs and amps). Set `player.type` to `"heos"` and `volume.type` to `"heos"`.
+- **Denon HEOS device?** Use HEOS as your player. Same source support as BlueSound: Plex, Jellyfin, CD, USB, and TIDAL work; Spotify via Connect (experimental, Premium); Apple Music does not. Works with any HEOS-enabled device (HEOS speakers, Denon/Marantz AVRs and amps). Set `player.type` to `"heos"` and `volume.type` to `"heos"`.
+
+- **WiiM / LinkPlay speaker? (experimental)** Use WiiM as your player. Same source support as BlueSound/HEOS. Set `player.type` to `"wiim"` and `volume.type` to `"wiim"`. Not yet validated on hardware.
+
+- **Modern B&O speaker (Mozart)? (experimental)** Beolab 8/28, Beosound A5/A9-5thgen/Balance/Emerge/Level, Beoconnect Core, etc. Uses B&O's official Mozart Open API and supports Beolink multiroom in the SPEAKERS menu. Set `player.type` to `"mozart"` and `volume.type` to `"mozart"`. Not yet validated on hardware.
+
+- **Older B&O speaker (ASE)? (experimental)** BeoPlay A6/A9-gen2, BeoSound 1/2/35-gen1, BeoSound Core, etc. Uses the BeoZone/BeoNotify product API. Set `player.type` to `"ase"` and `volume.type` to `"ase"`. Standalone player only (no multiroom yet); not yet validated on hardware.
 
 - **B&O PowerLink speakers?** Use PowerLink for volume. Local sources (CD, USB) play on the Pi and output to PowerLink speakers via the MasterLink bus. Streaming sources need a Sonos or BlueSound player. Set `volume.type` to `"powerlink"`.
 
@@ -23,30 +29,66 @@ The player service handles network-based playback. Sources send play commands to
 | Sonos | `spotify`, `url_stream` | ShareLink (Spotify, Apple Music, TIDAL) or `play_uri` (URLs) |
 | BlueSound | `url_stream` | BluOS HTTP API with stream URLs |
 | HEOS | `url_stream` | HEOS CLI protocol (TCP 1255) with stream URLs |
+| WiiM | `url_stream` | LinkPlay HTTP API (`httpapi.asp`) with stream URLs — **experimental** |
+| B&O Mozart | `url_stream` | Mozart Open API (`/api/v1`, `POST /playback/uri`), Beolink multiroom — **experimental** |
+| B&O ASE | *(none)* | BeoZone/BeoNotify product API — transport/metadata/volume only; can't play external URLs — **experimental**, no grouping |
 | Local | `spotify`, `url_stream` | mpv via PipeWire/PulseAudio; Spotify via go-librespot |
 
 Only one player is active — determined by `player.type` in config.json. The type guard in PlayerBase ensures only the matching player service starts.
+
+> **Experimental players not yet validated on hardware:** WiiM/LinkPlay, B&O Mozart, and B&O ASE. Multiroom grouping and "Play here" targeting (see [SPEAKERS](#speakers-multiroom--experimental)) are likewise experimental on BlueSound, HEOS, WiiM, and Mozart; only Sonos grouping is field-proven. ASE ships as a standalone player (no grouping) until its Beolink API is confirmed.
 
 ## Source Compatibility
 
 Sources check the player's capabilities at startup to determine how to play content.
 
-| Source | Sonos | BlueSound | HEOS | No Player |
-|---|---|---|---|---|
-| **Spotify** | Yes — ShareLink queues Spotify URIs natively | No | No | No |
-| **Apple Music** | Yes — ShareLink handles Apple Music share URLs | No | No | No |
-| **TIDAL** | Yes — ShareLink handles TIDAL share URLs | Yes — direct stream URLs | Yes — direct stream URLs | No |
-| **Plex** | Yes — `play_uri` with direct stream URLs | Yes — direct stream URLs | Yes — direct stream URLs | No |
-| **CD** | Yes — plays on Pi via mpv | Yes — plays on Pi via mpv | Yes — plays on Pi via mpv | Yes |
-| **USB** | Yes — streams track URLs to Sonos | Yes — streams track URLs | Yes — streams track URLs | Yes — falls back to local mpv |
+| Source | Sonos | BlueSound | HEOS | WiiM* | No Player |
+|---|---|---|---|---|---|
+| **Spotify** | Yes — ShareLink queues Spotify URIs natively | Connect† | Connect† | Connect† | No |
+| **Apple Music** | Yes — ShareLink handles Apple Music share URLs | No | No | No | No |
+| **TIDAL** | Yes — ShareLink handles TIDAL share URLs | Yes — direct stream URLs | Yes — direct stream URLs | Yes — direct stream URLs | No |
+| **Plex** | Yes — `play_uri` with direct stream URLs | Yes — direct stream URLs | Yes — direct stream URLs | Yes — direct stream URLs | No |
+| **Jellyfin** | Yes — `play_uri` with direct stream URLs | Yes — direct stream URLs | Yes — direct stream URLs | Yes — direct stream URLs | No |
+| **CD** | Yes — plays on Pi via mpv | Yes — plays on Pi via mpv | Yes — plays on Pi via mpv | Yes — plays on Pi via mpv | Yes |
+| **USB** | Yes — streams track URLs to Sonos | Yes — streams track URLs | Yes — streams track URLs | Yes — streams track URLs | Yes — falls back to local mpv |
+| **AirPlay 2** | No | No | No | No | No — needs `player.type: local` |
+
+*WiiM is experimental — the columns reflect the same capability model as BlueSound/HEOS (`url_stream`), unverified on hardware.
 
 **Key points:**
-- Spotify and Apple Music send share links via the `uri` parameter. Only Sonos handles these (via its ShareLink plugin). BlueSound and HEOS ignore `uri` — they only support direct stream URLs via `url`.
+- Spotify and Apple Music send share links via the `uri` parameter. Only Sonos handles these (via its ShareLink plugin). BlueSound, HEOS, and WiiM ignore `uri` — they only support direct stream URLs via `url`.
+- **† Spotify Connect (experimental):** for BlueSound/HEOS/WiiM the BS5c instead drives the speaker's *built-in* Spotify Connect receiver via the Spotify Web API — it starts/transfers playback to the device rather than sending a share link. Requires **Spotify Premium** and the speaker logged into the same Spotify account. Set `spotify.connect_device` to the speaker's Connect name (else it auto-picks by device name / active device). Apple Music has no equivalent transfer API, so it stays Sonos-only.
 - TIDAL works with both players: on Sonos it uses ShareLink (player manages queue); on BlueSound it resolves direct stream URLs via tidalapi and manages its own queue (like Plex)
-- Plex works with both players because it sends direct stream URLs (via `url`), not share links
-- Plex and TIDAL (on BlueSound) manage their own queues (next/prev build new stream URLs) while Spotify and Apple Music let the player handle queue advancement after the initial share link is queued
+- Plex and Jellyfin work with both players because they send direct stream URLs (via `url`), not share links
+- Plex, Jellyfin and TIDAL (on BlueSound) manage their own queues (next/prev build new stream URLs) while Spotify and Apple Music let the player handle queue advancement after the initial share link is queued
 - CD always plays locally via mpv — it doesn't use the player service
+- AirPlay 2 only works with the **local** player: the Pi itself is the receiver (shairport-sync into the PipeWire tone chain), so with a network player there is nothing for it to play into — and Sonos/HEOS/WiiM speakers do AirPlay 2 natively anyway. See [airplay.md](airplay.md).
 - USB auto-detects: if the player supports `url_stream`, it streams track URLs to the player; otherwise falls back to local mpv
+- **B&O ASE** advertises no capabilities — it can't play any BS5c source (no URL-play endpoint). It surfaces transport/metadata/volume for whatever the speaker plays from its *own* sources; TIDAL/Plex/CD/USB/Spotify are all unavailable on it. Use it only if you drive playback from the B&O app.
+
+## SPEAKERS (multiroom) — experimental
+
+When the configured player is a grouping-capable network player (Sonos, BlueSound, HEOS,
+or WiiM) and other rooms of the same platform are found, a **SPEAKERS** entry appears in
+the menu. It lists the discovered rooms with their now-playing info, the room you're
+currently driving pinned at the top. On a highlighted room:
+
+- **GO** — group it with what you're playing (extend your audio to that room, or, if the
+  BS5c is idle, join what that room is already playing).
+- **RIGHT** — *control this room*: re-point the BS5c so your controls and volume drive that
+  room instead. It does **not** move the audio that's already playing elsewhere — the
+  previous room keeps going; you're switching which room the BS5c commands. Sticky
+  (survives a reboot) until you control another room, or control the **HOME** room (marked
+  in the list) which resets to your configured default.
+- **LEFT** — back. To ungroup, select the **UNJOIN** row at the top of the list.
+
+Grouping uses each platform's native multiroom (Sonos groups, BluOS `AddSlave`, HEOS
+`set_group`, LinkPlay `ConnectMasterAp`). Only same-platform rooms are shown. Local /
+PowerLink players never show SPEAKERS — they produce audio on the device itself.
+
+> **Experimental**, except Sonos grouping which is field-proven. BlueSound, HEOS, and WiiM
+> grouping, and "Play here" targeting on all platforms, have not yet been validated on
+> hardware.
 
 ### Sonos
 
@@ -76,6 +118,42 @@ The Denon HEOS device handles playback natively. The BS5c talks to it over the H
 ```json
 "player": { "type": "heos", "ip": "192.168.1.100" },
 "volume": { "type": "heos", "host": "192.168.1.100", "max": 70 }
+```
+
+### WiiM / LinkPlay — experimental
+
+Drives a WiiM (or other LinkPlay) speaker via the LinkPlay HTTP API (`httpapi.asp`). The
+BS5c polls `getPlayerStatus`/`getMetaInfo` for state, metadata, and artwork, and sends
+transport/volume via `setPlayerCmd`. Newer WiiM firmware serves HTTPS with a self-signed
+certificate (verification is disabled); older LinkPlay devices serve plain HTTP. Same
+source support as BlueSound/HEOS (`url_stream`: TIDAL, Plex, CD, USB; Spotify via Spotify
+Connect — experimental, Premium; not Apple Music). **Experimental — not yet validated on
+hardware.**
+
+**Config:**
+```json
+"player": { "type": "wiim", "ip": "192.168.1.100" },
+"volume": { "type": "wiim", "host": "192.168.1.100", "max": 70 }
+```
+
+### B&O Mozart — experimental
+
+Drives a modern B&O speaker via the official [Mozart Open API](https://github.com/bang-olufsen/mozart-open-api) (`http://<ip>/api/v1` on **port 80**, no auth on the LAN). The BS5c follows the product's event stream (`ws://<ip>:9339/`, seeded from `/playback/state`; polled as a fallback), sends transport via `/playback/command/{play,pause,stop,skip,prev}`, plays URLs via `POST /playback/uri {"location": url}`, puts the speaker in network standby together with the BS5c (`PUT /state/standby`), and does multiroom over **Beolink** (`/beolink/peers`, `/beolink/join/{jid}`, `/beolink/expand/{jid}`, `/beolink/leave`) — so the SPEAKERS menu works. Same source support as BlueSound/HEOS. Request and response shapes follow the OpenAPI and the decompiled B&O app; **not yet validated on hardware.**
+
+**Config:**
+```json
+"player": { "type": "mozart", "ip": "192.168.1.100" },
+"volume": { "type": "mozart", "host": "192.168.1.100", "max": 70 }
+```
+
+### B&O ASE — experimental
+
+Drives an older (pre-Mozart) B&O speaker via the BeoNetRemote product API (`http://<ip>:8080`, the `/BeoDevice`, `/BeoZone` and `/BeoNotify` trees — what the B&O app itself speaks to these products). Transport via `/BeoZone/Zone/Stream/*` for streaming sources and `/BeoZone/Zone/List/StepUp|StepDown` for legacy ones (CD, radio, aux), volume via `PUT /BeoZone/Zone/Sound/Volume/Speaker/Level {"level": n}` scaled to the product's own 0–90 range, standby via `/BeoDevice/powerManagement/standby`, and now-playing from the `/BeoNotify/Notifications` stream (`VOLUME`, `SOURCE`, `PROGRESS_INFORMATION`, `NOW_PLAYING_STORED_MUSIC` / `NET_RADIO` / `LEGACY`, `SHUTDOWN`). The endpoints and payloads are the ones the decompiled B&O app uses, watched live against an emulated product and a real BeoLink Converter NL/ML; **not yet run against an ASE speaker.** Beolink grouping on ASE isn't wired — it ships as a **standalone player (no SPEAKERS)**.
+
+**Config:**
+```json
+"player": { "type": "ase", "ip": "192.168.1.100" },
+"volume": { "type": "ase", "host": "192.168.1.100", "max": 70 }
 ```
 
 ### PowerLink
@@ -141,7 +219,7 @@ The original BeoSound 5 chassis has a 3.5mm line-out jack on the rear. Audio rea
 
 There are two playback paths depending on the source:
 
-**Remote playback** — The source sends a play command to the player service (port 8766), which forwards it to the Sonos or BlueSound speaker. The speaker fetches and plays the audio. This is how Spotify, Apple Music, TIDAL, and Plex work. USB also uses this path when the player supports `url_stream`.
+**Remote playback** — The source sends a play command to the player service (port 8766), which forwards it to the Sonos or BlueSound speaker. The speaker fetches and plays the audio. This is how Spotify, Apple Music, TIDAL, Plex, and Jellyfin work. USB also uses this path when the player supports `url_stream`.
 
 **Local playback** — The source plays audio directly on the Pi using mpv. For wired outputs (PowerLink, HDMI, Optical, RCA) audio goes directly to the hardware. CD always plays locally. USB falls back to this mode when no player with `url_stream` is available.
 
@@ -155,6 +233,7 @@ Sources provide content to the BS5c. Each source registers with the router and a
 | Apple Music | Sends Apple Music share URLs to player via `player_play(uri=...)`. Sonos uses patched ShareLink. Sonos only. | Player manages queue |
 | TIDAL | Sonos: sends TIDAL share URLs via `player_play(uri=...)` (ShareLink). BlueSound: resolves direct stream URLs via tidalapi `track.get_url()`, sends via `player_play(url=...)`. | Sonos: player manages queue. BlueSound: source manages queue (next/prev play new stream URLs) |
 | Plex | Builds direct stream URLs from Plex server. Sends to player via `player_play(url=...)`. Works with Sonos and BlueSound. | Source manages queue (next/prev build new URLs) |
+| Jellyfin | Builds direct stream URLs from a Jellyfin server (`/Audio/{id}/universal` — the server direct-plays or transcodes to MP3 depending on the file). Sends to player via `player_play(url=...)`. | Source manages queue (next/prev build new URLs) |
 | CD | Local mpv playback from USB CD/DVD drive. Metadata from MusicBrainz. No player service needed. | Source manages tracks (mpv chapters) |
 | USB | Auto-detects: streams track URLs to player if `url_stream` available, otherwise local mpv. Supports BeoMaster 5 library databases and plain USB drives. Works with both players or standalone. | Source manages queue |
 
@@ -189,6 +268,49 @@ The `volume` section in `config.json`:
   "output_name": "Sonos"    // Name shown in the UI
 }
 ```
+
+## Jellyfin Setup
+
+Jellyfin has no cloud directory to look servers up through, so the one thing
+you have to supply is the address of your own server — the same one you open
+Jellyfin at, e.g. `http://jellyfin.local:8096`. Everything else happens on a
+sign-in page the device serves itself.
+
+1. Enable **JELLYFIN** in the config UI (`http://<device-ip>/config`). Fill in
+   **Server URL** if you want the sign-in page pre-filled — it's optional.
+2. Open `http://<device-ip>:8781/setup` (the **Authenticate →** link next to
+   JELLYFIN in the config UI, or scan the QR code the device shows the first
+   time you open the JELLYFIN menu item).
+3. Confirm the server address, then sign in:
+   - **Quick Connect** — the device shows a six-character code. Type it into
+     Jellyfin on a device you're already signed in on, under
+     *Settings → Quick Connect*. Nothing is typed on the BS5c itself.
+   - **Username and password** — always available, and the only option if the
+     server admin has Quick Connect switched off
+     (*Dashboard → General → Quick Connect*).
+
+Playlists and recently-added albums are fetched right after sign-in, then
+refreshed nightly at 05:00 and whenever you open the JELLYFIN view (at most
+once every five minutes).
+
+**Playback** — tracks are streamed from `/Audio/{id}/universal`, which lets the
+server direct-play anything already in a container the player understands (MP3,
+AAC/M4A, FLAC, WAV, Ogg) and transcode everything else to MP3 on the fly. That
+is why Jellyfin works on Sonos, BlueSound and HEOS alike, where Spotify and
+Apple Music don't.
+
+**Digit shortcuts** — a playlist named `5: Dinner` is reachable by pressing 5
+on the remote, exactly as with Spotify and Plex. Unnamed slots are auto-filled
+from the top of the list.
+
+**Notes:**
+- The access token is stored in `/etc/beosound5c/jellyfin_tokens.json` (mode
+  `0600`) and doesn't expire. Revoke it from Jellyfin's *Dashboard → Devices*;
+  the device then asks you to sign in again on the next refresh.
+- Self-signed HTTPS is accepted — a reverse-proxied server on the LAN is as
+  common as a plain HTTP one.
+- Artwork is fetched by the source and embedded as a data URI before being
+  handed to the UI, so a self-signed certificate can't break cover art.
 
 ## Spotify Setup
 

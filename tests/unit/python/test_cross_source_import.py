@@ -29,6 +29,7 @@ import pytest
 SOURCE_MODULES = [
     "sources.spotify.service",
     "sources.plex.service",
+    "sources.jellyfin.service",
     "sources.apple_music.service",
     "sources.tidal.service",
     "sources.usb.service",

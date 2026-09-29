@@ -28,11 +28,17 @@ const AppConfig = {
     // Apple Music source
     appleMusicServiceUrl: 'http://localhost:8774',
 
+    // AirPlay source (shairport-sync bridge)
+    airplayServiceUrl: 'http://localhost:8782',
+
     // TIDAL source
     tidalServiceUrl: 'http://localhost:8777',
 
     // Plex source
     plexServiceUrl: 'http://localhost:8778',
+
+    // Jellyfin source
+    jellyfinServiceUrl: 'http://localhost:8781',
 
     // USB file source
     usbServiceUrl: 'http://localhost:8773',

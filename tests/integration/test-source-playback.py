@@ -132,7 +132,8 @@ async def discover():
         pass
 
     # Source details
-    source_ports = {"cd": 8769, "spotify": 8771, "usb": 8773, "plex": 8778}
+    source_ports = {"cd": 8769, "spotify": 8771, "usb": 8773, "plex": 8778,
+                    "jellyfin": 8781}
     for sid, port in source_ports.items():
         try:
             r = json.loads(await http_get(port, "/status"))

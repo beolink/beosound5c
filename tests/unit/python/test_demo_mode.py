@@ -54,6 +54,7 @@ def test_demo_mode_activates_off_device():
     "config.json", "scenes.json", "digit_playlists.json",
     "spotify_playlists.json", "apple_music_playlists.json",
     "tidal_playlists.json", "plex_playlists.json",
+    "jellyfin_playlists.json",
     "radio_browse.json", "radio_favourites.json",
     "news_articles.json", "usb_browse.json",
 ])
@@ -65,6 +66,7 @@ def test_demo_file_parses(name):
 @pytest.mark.parametrize("name", [
     "spotify_playlists.json", "apple_music_playlists.json",
     "tidal_playlists.json", "plex_playlists.json",
+    "jellyfin_playlists.json",
 ])
 def test_playlist_files_match_the_service_shape(name):
     """Views parse these with the same code they use for the real services:
@@ -92,12 +94,13 @@ def test_browse_files_match_the_service_envelope():
 def test_demo_libraries_are_distinct():
     """Each service showing the same playlist names reads as a copy-paste job."""
     names = {}
-    for source in ("spotify", "apple_music", "tidal", "plex"):
+    for source in ("spotify", "apple_music", "tidal", "plex", "jellyfin"):
         data = json.loads((DEMO_JSON / f"{source}_playlists.json").read_text())
         names[source] = {p["name"] for p in data}
     assert not (names["spotify"] & names["tidal"])
     assert not (names["spotify"] & names["apple_music"])
     assert not (names["apple_music"] & names["plex"])
+    assert not (names["plex"] & names["jellyfin"])
 
 
 def test_artwork_is_self_contained_and_scalable():
@@ -157,7 +160,8 @@ def test_every_menu_entry_has_data_or_is_static():
 def test_pages_load_the_backend():
     """Each frame has its own fetch, so each page needs its own interception."""
     assert "demo-backend.js" in (WEB / "index.html").read_text()
-    for page in ("spotify", "tidal", "apple_music", "plex", "radio", "scenes", "news", "usb"):
+    for page in ("spotify", "tidal", "apple_music", "plex", "jellyfin", "radio",
+                 "scenes", "news", "usb"):
         html = (WEB / "softarc" / f"{page}.html").read_text()
         assert "demo-backend.js" in html, f"{page}.html does not load the demo backend"
 

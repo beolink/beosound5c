@@ -1252,7 +1252,7 @@ class ArcList {
             window.EmulatorBridge.notifySceneActivated(id, itemName);
         // Same music-service list as script.js, inlined because the views that
         // load this file (radio, scenes, news, usb) never load script.js.
-        } else if (['spotify', 'apple_music', 'tidal', 'plex'].includes(this.config.context)) {
+        } else if (['spotify', 'apple_music', 'tidal', 'plex', 'jellyfin'].includes(this.config.context)) {
             if (this.depth === 0) {
                 window.EmulatorBridge.notifyPlaylistSelected(id, itemName);
             } else {

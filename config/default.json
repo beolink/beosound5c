@@ -4,13 +4,14 @@
 
   "menu": {
     "PLAYING": "playing",
-    "JOIN": "join",
+    "SPEAKERS": "join",
     "CD": "cd",
     "USB": "usb",
     "SPOTIFY": "spotify",
     "APPLE MUSIC": "apple_music",
     "TIDAL": "tidal",
     "PLEX": "plex",
+    "JELLYFIN": "jellyfin",
     "NEWS": "news",
     "RADIO": "radio",
     "SCENES": "scenes",

@@ -144,6 +144,48 @@ html, body {
   transition: all 0.3s ease-in-out;
 }
 
+/* ── Playback state (body classes set by media-manager.js) ──
+   body.playback-paused  : ❚❚ on the state line, artwork dimmed.
+   body.playback-resumed : ▶ flashes once on the not-playing → playing edge;
+                           media-manager removes the class on animationend.
+   The state line always reserves its height so the title never shifts. */
+.media-view-state,
+.immersive-info-state {
+  height: 16px;
+  line-height: 16px;
+  font-size: 11px;
+  letter-spacing: 2px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.media-view-state { margin-bottom: 4px; }
+.immersive-info-state { margin-bottom: 6px; }
+
+body.playback-paused .media-view-state::before,
+body.playback-paused .immersive-info-state::before { content: '❚❚'; }
+body.playback-paused .media-view-state,
+body.playback-paused .immersive-info-state { opacity: 0.85; }
+
+body.playback-resumed .media-view-state::before,
+body.playback-resumed .immersive-info-state::before { content: '▶'; }
+body.playback-resumed .media-view-state,
+body.playback-resumed .immersive-info-state {
+  animation: bs5c-resume-flash 1.2s ease-out forwards;
+}
+@keyframes bs5c-resume-flash {
+  0%   { opacity: 0; }
+  15%  { opacity: 0.9; }
+  60%  { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+
+#now-playing .media-view-artwork img {
+  transition: opacity 0.6s ease-in-out, filter 0.4s ease;
+}
+body.playback-paused #now-playing .media-view-artwork img {
+  filter: brightness(0.55);
+}
+
 .media-view-title,
 .media-view-artist,
 .media-view-album {
@@ -446,6 +488,15 @@ html, body {
   background: #0a0a0a;
   border-radius: 4px;
   overflow: hidden;
+}
+
+/* One camera: take the width both slots would have used, keeping the 4:3
+   frame and leaving room for the header and button hints. */
+.camera-feeds-dual.single .camera-feed-container {
+  width: min(904px, 92vw);
+  height: auto;
+  aspect-ratio: 4 / 3;
+  max-height: 62vh;
 }
 
 .camera-feed {
@@ -981,6 +1032,41 @@ html, body {
   letter-spacing: 0.5px;
 }
 
+/* Current-target row (the room we're driving), pinned at the top */
+.cd-arc-item.join-current .cd-arc-item-name { color: #4da3ff; }
+.join-current-badge {
+  font-size: 0.6rem;
+  letter-spacing: 1px;
+  color: #4da3ff;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* Button legend — kept inside x=180–870 so the aluminium wheel can't hide it */
+.speakers-legend {
+  position: absolute;
+  bottom: 22px;
+  left: 190px;
+  right: 160px;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 28px;
+  font-size: 12px;
+  color: #666;
+  pointer-events: none;
+}
+.speakers-legend > span { display: flex; align-items: center; gap: 8px; }
+.speakers-key {
+  background: #1a1a1a;
+  padding: 3px 9px;
+  border-radius: 3px;
+  color: #8a8a8a;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+.speakers-legend-note { color: #c07a3a; }
+
 .join-empty {
   position: absolute;
   top: 50%;
@@ -991,6 +1077,39 @@ html, body {
   font-size: 16px;
   font-weight: 300;
   line-height: 2;
+}
+
+/* ── AirPlay Source ── */
+
+/* AirPlay has nothing to browse — the sender owns the queue — so this view is
+   a centred status panel rather than an arc. Geometry matches .join-empty. */
+.airplay-status {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  max-width: 80%;
+  font-weight: 300;
+  line-height: 2;
+}
+
+.airplay-status .airplay-headline {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 20px;
+  line-height: 1.5;
+}
+
+.airplay-status .airplay-sub {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.airplay-status .airplay-from {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 13px;
+  margin-top: 8px;
 }
 
 /* ── Spotify Canvas Video Panel ────────────────────────────────── */

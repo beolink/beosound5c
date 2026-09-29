@@ -27,6 +27,10 @@ DEFAULT_SOURCE_HANDLES = {
     "news": {"go", "left", "right", "up", "down"},
     "radio": {"play", "pause", "next", "prev", "stop", "go", "left", "right",
               "up", "down"} | _DIGITS,
+    # No digits: an AirPlay session has no station or track numbering to
+    # jump to — the sender owns the queue.
+    "airplay": {"play", "pause", "next", "prev", "stop", "go", "left", "right",
+                "up", "down"},
 }
 
 # Known source ports — used on startup to probe running sources
@@ -38,7 +42,9 @@ DEFAULT_SOURCE_PORTS = {
     "news": 8776,
     "tidal": 8777,
     "plex": 8778,
+    "jellyfin": 8781,
     "radio": 8779,
+    "airplay": 8782,
     "join": 8766,
 }
 

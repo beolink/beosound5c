@@ -23,6 +23,11 @@
     // flashes the menu before immersive mode kicks in.
     let eagerEntryArmed = false;
     let eagerEntryArmedTimer = null;
+    // Set by hardware-input when a physical GO on the PLAYING view is about
+    // to resume playback. The next not-playing → playing edge consumes it
+    // and stays in the menu: only starts from *elsewhere* (Sonos/Spotify
+    // app, BeoRemote, HA) pull the screen into immersive.
+    let localPlayPending = false;
 
     function isFullyImmersive() { return progress >= 1; }
     function isPartiallyImmersive() { return progress > 0; }
@@ -47,6 +52,7 @@
             el = document.createElement('div');
             el.className = 'immersive-info';
             el.innerHTML =
+                '<div class="immersive-info-state"></div>' +
                 '<div class="immersive-info-title"></div>' +
                 '<div class="immersive-info-artist"></div>' +
                 '<div class="immersive-info-album"></div>';
@@ -392,6 +398,29 @@
             syncOverlayDots();
         });
 
+        // 6. Playback started (not-playing → playing edge, from media-manager).
+        //    A start from somewhere other than this device's own buttons goes
+        //    straight to immersive: navigate to PLAYING if we're elsewhere
+        //    (the view-change path above enters immersive since isPlaying()
+        //    is already true), or enter in place if we're already there —
+        //    that's the case the backend's "navigate" wake can't cover, since
+        //    navigating to the current route produces no view change.
+        document.addEventListener('bs5c:playback-started', () => {
+            if (localPlayPending) {
+                localPlayPending = false;
+                return;
+            }
+            if (!eagerEntryAllowed) return;
+            if (uiStore.currentRoute !== 'menu/playing') {
+                uiStore.navigateToView('menu/playing');
+                return;
+            }
+            if (isFullyImmersive() || isTracking) return;
+            ensureOverlay();
+            uiStore.setMenuVisible(false);
+            animatedEnter();
+        });
+
         // Initial setup
         //
         // Demo mode skips the eager entry below. On a device, waking to a
@@ -444,11 +473,19 @@
         }, 3000);
     }
 
+    /** A physical GO on the PLAYING view is about to resume playback —
+     *  the resulting playback-started edge must not enter immersive. Only
+     *  latches while not playing (a GO that pauses is not a start). */
+    function noteLocalPlayIntent() {
+        if (!isPlaying()) localPlayPending = true;
+    }
+
     // Expose for debugging / manual toggle
     window.ImmersiveMode = {
         enter: animatedEnter,
         exit: animatedExit,
         armEagerEntry,
+        noteLocalPlayIntent,
         get active() { return isPartiallyImmersive(); },
         get progress() { return progress; },
         syncText: () => syncOverlayText(false)

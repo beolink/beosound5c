@@ -84,6 +84,7 @@ source "$SCRIPT_ROOT/install/modules/x11.sh"
 source "$SCRIPT_ROOT/install/modules/audio-hat.sh"
 source "$SCRIPT_ROOT/install/modules/plymouth.sh"
 source "$SCRIPT_ROOT/install/modules/librespot.sh"
+source "$SCRIPT_ROOT/install/modules/airplay.sh"
 source "$SCRIPT_ROOT/install/modules/piper.sh"
 source "$SCRIPT_ROOT/install/modules/ytdlp.sh"
 source "$SCRIPT_ROOT/install/modules/verify.sh"
@@ -281,6 +282,7 @@ run_system_setup() {
     disable_desktop_session
     install_plymouth_theme
     install_librespot
+    install_airplay
     install_piper
     install_ytdlp
     install_usb_music_support

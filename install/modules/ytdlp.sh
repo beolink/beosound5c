@@ -8,7 +8,7 @@
 #   1. It must stay CURRENT. YouTube changes its player often enough that a
 #      build more than a few weeks old stops extracting ("Requested format is
 #      not available" / SABR), and the Debian package lags far behind. So we
-#      install from pip and add a weekly self-update timer.
+#      install from pip and add a daily self-update timer.
 #
 #   2. It must NOT be the PyInstaller standalone binary. That build
 #      self-extracts ~70MB into /tmp on every run and leaks the extraction
@@ -71,7 +71,7 @@ install_ytdlp() {
     fi
 
     # Weekly self-update timer so the feature keeps working as YouTube changes.
-    log_info "Installing weekly yt-dlp self-update timer..."
+    log_info "Installing daily yt-dlp self-update timer..."
     cat > /etc/systemd/system/beo-ytdlp-update.service << 'EOF'
 [Unit]
 Description=BeoSound 5c — update yt-dlp (music video)
@@ -85,10 +85,10 @@ EOF
 
     cat > /etc/systemd/system/beo-ytdlp-update.timer << 'EOF'
 [Unit]
-Description=BeoSound 5c — weekly yt-dlp update
+Description=BeoSound 5c — daily yt-dlp update
 
 [Timer]
-OnCalendar=weekly
+OnCalendar=daily
 Persistent=true
 RandomizedDelaySec=1h
 
@@ -98,6 +98,6 @@ EOF
 
     systemctl daemon-reload
     systemctl enable --now beo-ytdlp-update.timer >/dev/null 2>&1 \
-        && log_success "yt-dlp weekly update timer enabled" \
+        && log_success "yt-dlp daily update timer enabled" \
         || log_warn "Could not enable yt-dlp update timer"
 }

@@ -166,7 +166,8 @@ class LydbroHandler:
                 r._spawn(r._volume.power_on(), name="lydbro_power_on")
             source_map = {"Spotify": "spotify", "Radio": "radio",
                           "TIDAL": "tidal", "CD": "cd", "USB": "usb",
-                          "Plex": "plex", "Favorites": "radio"}
+                          "Plex": "plex", "Jellyfin": "jellyfin",
+                          "Favorites": "radio"}
             source_id = source_map.get(event, event.lower())
             src = r.registry.get(source_id)
             if src and src.command_url:
