@@ -76,11 +76,27 @@
 
     // ── Applying ──
 
+    // On the body, next to the canvas panel, and for the same reason.
+    //
+    // position:fixed resolves against the nearest ancestor with a
+    // transform, and #viewport and #contentArea both carry one — the GPU
+    // promotion hints in hardware-input.js. Mounted inside #now-playing
+    // the layer inherited that box: right size, but starting 180px in,
+    // leaving a strip of artwork down the left of the screen.
     function host() {
-        return document.getElementById('now-playing') || document.body;
+        return document.body;
     }
 
+    // Only while PLAYING is on screen. The layer is a full-screen fixed
+    // element, so left mounted it would cover whatever you navigated to.
+    let onPlaying = true;
+
     function apply(id) {
+        if (!onPlaying) {
+            if (window.BeoVisualizer) window.BeoVisualizer.unmount();
+            applied = null;
+            return;
+        }
         const list = available();
         // The chosen backdrop may not exist for this track. Fall back to
         // Auto for the moment rather than stepping to a neighbour, which
@@ -196,7 +212,19 @@
         apply(chosen);
     }
 
+    // The shell announces every view change; canvas-panel listens to the
+    // same event for the same reason.
+    document.addEventListener('bs5c:view-change', (e) => {
+        const to = e?.detail?.to;
+        const was = onPlaying;
+        onPlaying = (to === 'menu/playing');
+        if (was === onPlaying) return;
+        applied = null;          // force a fresh decision either way
+        apply(chosen);
+    });
+
     function init() {
+        onPlaying = (window.uiStore?.currentRoute === 'menu/playing');
         fetch(routerUrl('/router/backdrop'))
             .then(r => r.json())
             .then(d => { if (d && d.backdrop) { chosen = d.backdrop; apply(chosen); } })

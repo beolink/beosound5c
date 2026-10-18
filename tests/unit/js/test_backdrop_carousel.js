@@ -42,14 +42,18 @@ function fakeEl() {
     };
 }
 
+const listeners = {};
 global.window = {};
 global.document = {
     readyState: 'complete',
     body: fakeEl(),
     createElement: fakeEl,
     getElementById: () => null,          // no PLAYING container in a test
-    addEventListener() {},
+    addEventListener(type, fn) { (listeners[type] ||= []).push(fn); },
 };
+function fire(type, detail) {
+    (listeners[type] || []).forEach(fn => fn({ detail }));
+}
 global.performance = { now: () => Date.now() };
 global.fetch = () => Promise.resolve({ json: () => Promise.resolve({}) });
 
@@ -172,5 +176,41 @@ describe('the wheel', () => {
 
     it('always consumes the event, so the wheel never falls through', () => {
         assert.equal(backdrop.handleNav({ direction: 'clock', speed: 10 }), true);
+    });
+});
+
+describe('leaving the view', () => {
+    // The layer is a full-screen fixed element. Left mounted it would sit
+    // over whatever you navigated to, so it comes down on the way out and
+    // goes back up on the way in.
+    it('takes the visualizer down when PLAYING is left', () => {
+        let mounted = 0, unmounted = 0;
+        withServices({ visualizer: true });
+        global.window.BeoVisualizer = {
+            mount() { mounted++; }, unmount() { unmounted++; }, setMode() {}, mode: 'vu',
+        };
+        backdrop._setChosen('milkdrop');
+
+        // Leaving first, because the module starts out assuming PLAYING —
+        // on a device init() reads the real route before anything happens.
+        fire('bs5c:view-change', { to: 'menu/spotify' });
+        assert.ok(unmounted > 0, 'the layer stayed up after leaving PLAYING');
+
+        const before = mounted;
+        fire('bs5c:view-change', { to: 'menu/playing' });
+        assert.ok(mounted > before, 'it did not come back on return');
+    });
+
+    it('ignores a view change that is not a change', () => {
+        let unmounted = 0;
+        withServices({ visualizer: true });
+        global.window.BeoVisualizer = {
+            mount() {}, unmount() { unmounted++; }, setMode() {}, mode: 'vu',
+        };
+        backdrop._setChosen('vu');
+        fire('bs5c:view-change', { to: 'menu/playing' });
+        const before = unmounted;
+        fire('bs5c:view-change', { to: 'menu/playing' });
+        assert.equal(unmounted, before);
     });
 });
