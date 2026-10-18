@@ -86,6 +86,14 @@
         // socket entirely rather than retrying it every two seconds and
         // filling the console. The synthetic signal below takes over.
         if (window.__demoBackendInstalled) return;
+        // Already up, or on its way. mount() is called again on every step
+        // between visualizer modes, and without this each step opened
+        // another socket while the last stayed open: the service counted
+        // one client, then two, then three, all of them fed at 43 frames a
+        // second. Caught on a device, invisible in the emulator, which has
+        // no socket at all.
+        if (ws && (ws.readyState === WebSocket.CONNECTING
+                   || ws.readyState === WebSocket.OPEN)) return;
         try {
             ws = new WebSocket(FEED.replace(/^http/, 'ws') + '/ws');
         } catch (e) { scheduleReconnect(); return; }
