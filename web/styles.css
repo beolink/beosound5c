@@ -1112,6 +1112,43 @@ body.playback-paused #now-playing .media-view-artwork img {
   margin-top: 8px;
 }
 
+/* ── Backdrop: visualizer layer and its label ──────────────────── */
+
+/* Sits over the artwork and under the canvas panel, so choosing a canvas
+   or a video still puts those on top. The now-playing text is drawn above
+   both — this is a backdrop, not a view. */
+.visualizer-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: var(--ui-w, 1024px);
+    height: var(--ui-h, 768px);
+    background: #000;
+    z-index: 99988;
+    pointer-events: none;
+}
+
+/* Says where the wheel landed, then gets out of the way. Low enough on the
+   screen to clear the artwork and high enough to clear the progress bar. */
+.backdrop-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 78px;
+    transform: translateX(-50%);
+    font-family: 'Montserrat', sans-serif;
+    font-size: 15px;
+    font-weight: 300;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.75);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+    z-index: 99995;
+}
+
+.backdrop-toast.show { opacity: 1; }
+
 /* ── Spotify Canvas Video Panel ────────────────────────────────── */
 
 .canvas-panel {
