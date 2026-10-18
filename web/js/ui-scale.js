@@ -22,15 +22,28 @@
     var DESIGN_W = 1024;
     var DESIGN_H = 768;
 
+    // Near enough is better than exact. The kiosk on the device reports a
+    // 1023x767 viewport inside its 1024x768 panel — a pixel of window
+    // chrome — and fitting the design into that would resample the whole
+    // interface by a tenth of a percent, softening every glyph to recover
+    // one row of pixels nobody can see. Below this, render 1:1 and let the
+    // edge clip, which is what the device did before any of this existed.
+    var SNAP = 0.99;
+
     function apply() {
         var scale = Math.min(window.innerWidth / DESIGN_W,
                              window.innerHeight / DESIGN_H);
+        // Only snaps upward, and only from just below: a viewport larger
+        // than the design still scales up to fill it.
+        if (scale > SNAP && scale < 1) scale = 1;
         var style = document.documentElement.style;
         style.setProperty('--ui-scale', scale);
+        // Whole pixels: a half-pixel offset resamples just as surely as a
+        // fractional scale does.
         style.setProperty('--ui-offset-x',
-            ((window.innerWidth - DESIGN_W * scale) / 2) + 'px');
+            Math.round((window.innerWidth - DESIGN_W * scale) / 2) + 'px');
         style.setProperty('--ui-offset-y',
-            ((window.innerHeight - DESIGN_H * scale) / 2) + 'px');
+            Math.round((window.innerHeight - DESIGN_H * scale) / 2) + 'px');
     }
 
     apply();
